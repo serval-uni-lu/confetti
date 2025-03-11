@@ -1,7 +1,9 @@
-import os
+
+import copy
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import keras
 from pathlib import Path
 from tslearn.neighbors import KNeighborsTimeSeries
 from pymoo.algorithms.moo.nsga3 import NSGA3
@@ -10,15 +12,17 @@ from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.operators.crossover.pntx import TwoPointCrossover
 from pymoo.operators.mutation.bitflip import BitflipMutation
 from pymoo.operators.sampling.rnd import BinaryRandomSampling
+from multiprocessing import Pool
 from pymoo.termination import get_termination
 from .problem import CounterfactualProblem
 from .utils import convert_string_to_array
-import time
 
 
-class CONFETTI():
-    def __init__(self, model, X_train, X_test, y_test, y_train, weights):
-        self.model = model
+
+class CONFETTI:
+    def __init__(self, model_path, X_train, X_test, y_test, y_train, weights):
+        self.model_path = model_path
+        self.model = keras.models.load_model(model_path)
         self.X_train = X_train
         self.X_test = X_test
         self.y_test = y_test
@@ -74,7 +78,7 @@ class CONFETTI():
 
         return dist[0], df[df['label'] != predicted_label].index[ind[0][:]]
 
-    def naive_approach(self, instance, nun, subarray_length=1):
+    def naive_approach(self, instance, nun, model, subarray_length=1):
         """
         Swap the original instance's values for those of the nearest unlike neighbour (nun). Naive Approach.
 
@@ -92,7 +96,7 @@ class CONFETTI():
                                          (self.X_train[nun][starting_point:subarray_length + starting_point]),
                                          self.X_test[instance][subarray_length + starting_point:]))
 
-        prob_target = self.model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]))[0][
+        prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]))[0][
             self.y_pred_train[nun]]
 
         while prob_target <= 0.5:
@@ -109,23 +113,22 @@ class CONFETTI():
                                              self.X_test[instance][subarray_length + starting_point:]))
 
             # Feed new instance to model and check if the probability target changed.
-            prob_target = self.model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]))[0][
+            prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]))[0][
                 self.y_pred_train[nun]]
-        sparsity = np.mean(self.X_test[instance].flatten() == counterfactual.flatten())
-        counterfactual_dict = {'Solution': [counterfactual], 'Window': subarray_length, 'Sparsity': sparsity,
-                               'Precision': prob_target, 'Test Instance': instance, 'NUN Instance': nun}
+
+
+        counterfactual_dict = {'Solution': [counterfactual], 'Window': subarray_length,
+                               'Test Instance': instance, 'NUN Instance': nun}
         counterfactual_df = pd.DataFrame(counterfactual_dict)
         return counterfactual_df
 
-    def optimization(self, instance_index: int, nun_index: int):
+    def optimization(self, instance_index: int, nun_index: int, subsequence_length:int, model):
         # Initialize Values
         query = self.X_test[instance_index]
-        # starting_point = self.counterfactuals[instance_index][1]
-        subsequence_length = self.naive_counterfactuals.iloc[instance_index]["Window"]
-        # end_point = starting_point + subsequence_length
-        nun = self.X_train[nun_index]
+
+        nun = copy.deepcopy(self.X_train[nun_index])
         solutions = pd.DataFrame(
-            columns=["Solution", "Window", "Sparsity", "Precision", "Test Instance", "NUN Instance"])
+            columns=["Solution", "Window", "Test Instance", "NUN Instance"])
         no_solution = 0
 
         # Start Optimization Search
@@ -136,7 +139,7 @@ class CONFETTI():
             end_point = starting_point + window
 
             # Define the Counterfactual Problem
-            problem = CounterfactualProblem(query, nun, nun_index, starting_point, window, self.model,
+            problem = CounterfactualProblem(query, nun, nun_index, starting_point, window, model,
                                             self.y_pred_train)
 
             # create the reference directions to be used for the optimization in NSGA3
@@ -168,10 +171,9 @@ class CONFETTI():
 
                     op_counterfactual_reshaped = op_counterfactual.reshape(1, op_counterfactual.shape[0],
                                                                            op_counterfactual.shape[1])
-                    f1 = self.model.predict(op_counterfactual_reshaped)[0][self.y_pred_train[nun_index]]
-                    f2 = np.mean(query.flatten() == op_counterfactual.flatten())
-                    row_dict = {'Solution': [op_counterfactual], 'Window': window, 'Sparsity': f2, 'Precision': f1,
-                                'Test Instance': instance_index, 'NUN Instance': nun_index}
+
+                    row_dict = {'Solution': [op_counterfactual], 'Window': window, 'Test Instance': instance_index,
+                                'NUN Instance': nun_index}
                     row_df = pd.DataFrame(row_dict)
                     solutions = pd.concat([solutions, row_df], ignore_index=True)
 
@@ -180,7 +182,46 @@ class CONFETTI():
 
         return solutions
 
-    def counterfactual_generator(self, directory=os.getcwd(), save_counterfactuals=False, optimization=False):
+    def one_pass(self, test_instance):
+        #Load model
+        model = keras.models.load_model(self.model_path)
+        # Find the Nearest Unlike Neighbour
+        nun = self.nearest_unlike_neighbour(self.X_test[test_instance], self.y_pred[test_instance], 'euclidean', 1)[1][0]
+        # Naive Approach
+        naive = self.naive_approach(test_instance, nun, model)
+        # Optimization
+        optimized = self.optimization(test_instance, nun, model=model, subsequence_length=naive.iloc[0]["Window"])
+
+        return naive, optimized
+
+    def parallelized_counterfactual_generator(self, output_directory=None, save_counterfactuals=True, processes=8):
+        self.naive_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
+        self.optimized_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
+
+        pool = Pool(processes=processes)
+        res = pool.map(self.one_pass, range(len(self.X_test)))
+        pool.close()
+        pool.join()
+
+        for r in res:
+            self.nuns.append(r[0])
+            self.naive_counterfactuals = pd.concat([self.naive_counterfactuals, r[1]], ignore_index=True)
+            self.optimized_counterfactuals = pd.concat([self.optimized_counterfactuals, r[2]], ignore_index=True)
+
+        self.optimized_counterfactuals = self.optimized_counterfactuals.groupby('Test Instance', as_index=False).apply(
+            lambda x: x.drop_duplicates(subset='Window')).reset_index(drop=True)
+
+        if save_counterfactuals:
+            # If directory is not specified, use the current one
+            output_directory = Path(output_directory) if output_directory else Path.cwd()
+            output_directory.mkdir(parents=True, exist_ok=True)
+
+            # Save files as csv
+            self.naive_counterfactuals.to_csv(output_directory / 'confetti_naive_counterfactuals.csv', index=False)
+            self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv',
+                                                  index=False)
+
+    def counterfactual_generator(self, directory=None, save_counterfactuals=False, optimization=False):
 
         # Generate Next Unilikely Neighbour
         for instance in range(len(self.X_test)):
@@ -193,17 +234,17 @@ class CONFETTI():
 
         # Generate the Counterfactuals with the Naive Approach
         self.naive_counterfactuals = pd.DataFrame(
-            columns=["Solution", "Window", "Sparsity", "Precision", "Test Instance", "NUN Instance"])
+            columns=["Solution", "Window", "Test Instance", "NUN Instance"])
         for test_instance, nun in zip(test_instances, self.nuns):
-            naives = self.naive_approach(test_instance, nun)
+            naives = self.naive_approach(test_instance, nun, self.model)
             self.naive_counterfactuals = pd.concat([self.naive_counterfactuals, naives], ignore_index=True)
 
         if optimization == True:
             # Optimize Counterfactuals
-            self.optimized_counterfactuals = pd.DataFrame(
-                columns=["Solution", "Window", "Sparsity", "Precision", "Test Instance", "NUN Instance"])
+            self.optimized_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
             for test_instance, nun in zip(test_instances, self.nuns):
-                ce_optimized = self.optimization(test_instance, nun)
+                ce_optimized = self.optimization(test_instance, nun,
+                                                 self.naive_counterfactuals.iloc[test_instances]["Window"],self.model)
                 self.optimized_counterfactuals = pd.concat([self.optimized_counterfactuals, ce_optimized],
                                                            ignore_index=True)
 
@@ -213,14 +254,14 @@ class CONFETTI():
 
         if save_counterfactuals:
             # Create the directory if it doesn't exist
-            output_directory = Path(directory)
+            output_directory = Path(directory) if directory else Path.cwd()
             output_directory.mkdir(parents=True, exist_ok=True)
 
             # Save the naive counterfactuals
             self.naive_counterfactuals.to_csv(output_directory / 'confetti_naive_counterfactuals.csv', index=False)
 
             if optimization:
-                self.optimized_counterfactuals.to_csv(Path(directory) / 'confetti_optimized_counterfactuals.csv', index=False)
+                self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv', index=False)
 
     def get_naive_counterfactual(self, instance: int):
         if hasattr(self, 'naive_counterfactuals'):

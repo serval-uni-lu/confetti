@@ -291,3 +291,26 @@ def plot_with_cam(ce, instance: int, optimized=False, precision=True, weights=No
         data_dict['CAM_Weights'] = weights
 
     return pd.DataFrame(data_dict)
+
+
+def tradeoff_sparsity_proximity(df):
+    """
+    Plots each row from the dataframe in a space where X is df['Proximity'] and Y is df['Sparsity'].
+
+    Parameters:
+    df (pd.DataFrame): A dataframe containing 'Proximity' and 'Sparsity' columns.
+    """
+    if 'Proximity' not in df.columns or 'Sparsity' not in df.columns:
+        raise ValueError("DataFrame must contain 'Proximity' and 'Sparsity' columns.")
+
+    plt.figure(figsize=(8, 6))
+    plt.scatter(df['Proximity'], df['Sparsity'], color='#64cdc0', alpha=0.7, label='Samples')
+
+    plt.xlabel("Proximity")
+    plt.ylabel("Sparsity")
+    plt.title("Trade-off between Sparsity and Proximity")
+    plt.axhline(0, color='black', linewidth=0.5, linestyle='--')
+    plt.axvline(0, color='black', linewidth=0.5, linestyle='--')
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.show()

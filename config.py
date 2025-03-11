@@ -9,4 +9,7 @@ TRAINED_MODELS_DIR = MODELS_DIR / "trained_models"
 CAM_WEIGHTS_DIR = TRAINED_MODELS_DIR
 RESULTS_DIR = BASE_DIR / "results"
 
-print(BASE_DIR)
+#Datasets to Test
+DATASETS = ['ArticularyWordRecognition', 'AtrialFibrillation', 'BasicMotions', 'Epilepsy', 'ERing', 'Libras', 'NATOPS', 'RacketSports']
+DATASETS_TEST = ['BasicMotions']
+
