@@ -1,4 +1,3 @@
-
 import copy
 import numpy as np
 import pandas as pd
@@ -16,7 +15,7 @@ from multiprocessing import Pool
 from pymoo.termination import get_termination
 from .problem import CounterfactualProblem
 from .utils import convert_string_to_array
-
+import time
 
 
 class CONFETTI:
@@ -27,33 +26,22 @@ class CONFETTI:
         self.X_test = X_test
         self.y_test = y_test
         self.y_train = y_train
-        self.y_pred = np.argmax(self.model.predict(self.X_test), axis=1)
-        self.y_pred_train = np.argmax(self.model.predict(self.X_train), axis=1)
+        self.y_pred = np.argmax(self.model.predict(self.X_test, verbose=0), axis=1)
+        self.y_pred_train = np.argmax(self.model.predict(self.X_train, verbose=0), axis=1)
         self.weights = weights
         self.nuns = []
 
-    def findSubarray(self, a: list, k: int):  # used to find the maximum contiguous subarray of length k in the explanation weight vector
-
-        n = len(a)
-
-        vec = []
-
-        # Iterate to find all the sub-arrays
-        for i in range(n - k + 1):
-            temp = []
-
-            # Store the sub-array elements in the array
-            for j in range(i, i + k):
-                temp.append(a[j])
-
-                # Push the vector in the container
-            vec.append(temp)
-
-        sum_arr = []
-        for v in vec:
-            sum_arr.append(np.sum(v))
-
-        return (vec[np.argmax(sum_arr)])
+    def findSubarray(self, a: list,
+                     k: int):  # used to find the maximum contiguous subarray of length k in the explanation weight vector
+        start = 0
+        max_sum = curr_sum = sum(a[start:start + k])
+        for i in range(1, len(a) - k + 1):
+            curr_sum -= a[i - 1]
+            curr_sum += a[i + k - 1]
+            if curr_sum > max_sum:
+                max_sum = curr_sum
+                start = i
+        return start
 
     def nearest_unlike_neighbour(self, query, predicted_label, distance, n_neighbors):
         """
@@ -75,7 +63,6 @@ class CONFETTI:
 
         dist, ind = knn.kneighbors(query.reshape(1, query.shape[0], query.shape[1]), return_distance=True)
 
-
         return dist[0], df[df['label'] != predicted_label].index[ind[0][:]]
 
     def naive_approach(self, instance, nun, model, subarray_length=1):
@@ -88,24 +75,20 @@ class CONFETTI:
             subarray_length = The length of the sub-sequence that will be modified
         """
         # Initialize values
-        most_influential_array = self.findSubarray(self.weights[nun], subarray_length)
 
-        starting_point = np.where(self.weights[nun] == most_influential_array[0])[0][0]
+        starting_point = self.findSubarray(self.weights[nun], subarray_length)
 
         counterfactual = np.concatenate((self.X_test[instance][:starting_point],
                                          (self.X_train[nun][starting_point:subarray_length + starting_point]),
                                          self.X_test[instance][subarray_length + starting_point:]))
 
-        prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]))[0][
+        prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]), verbose=0)[0][
             self.y_pred_train[nun]]
 
         while prob_target <= 0.5:
             subarray_length += 1
-
-            # Get the sub-sequence.
-            most_influential_array = self.findSubarray((self.weights[nun]), subarray_length)
             # Timestep where it starts
-            starting_point = np.where(self.weights[nun] == most_influential_array[0])[0][0]
+            starting_point = self.findSubarray((self.weights[nun]), subarray_length)
 
             # Create the counterfactual by swapping the original instance's values for the NUN's.
             counterfactual = np.concatenate((self.X_test[instance][:starting_point],
@@ -113,29 +96,31 @@ class CONFETTI:
                                              self.X_test[instance][subarray_length + starting_point:]))
 
             # Feed new instance to model and check if the probability target changed.
-            prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]))[0][
+            prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]),verbose=0)[0][
                 self.y_pred_train[nun]]
-
 
         counterfactual_dict = {'Solution': [counterfactual], 'Window': subarray_length,
                                'Test Instance': instance, 'NUN Instance': nun}
         counterfactual_df = pd.DataFrame(counterfactual_dict)
         return counterfactual_df
 
-    def optimization(self, instance_index: int, nun_index: int, subsequence_length:int, model):
+    def optimization(self, instance_index: int, nun_index: int, subsequence_length: int, model):
         # Initialize Values
         query = self.X_test[instance_index]
 
         nun = copy.deepcopy(self.X_train[nun_index])
         solutions = pd.DataFrame(
             columns=["Solution", "Window", "Test Instance", "NUN Instance"])
-        no_solution = 0
 
         # Start Optimization Search
-        for window in range(subsequence_length, 1, -1):
-            most_influencial_array = self.findSubarray((self.weights[nun_index]), window)
+        high = subsequence_length
+        low = 1
+        while low <= high:
+            start_time = time.time()
+            window = (low + high) // 2
+            print(f"We are starting the optimization in window {window}")
             # Timestep where it starts
-            starting_point = np.where(self.weights[nun_index] == most_influencial_array[0])[0][0]
+            starting_point = self.findSubarray((self.weights[nun_index]), window)
             end_point = starting_point + window
 
             # Define the Counterfactual Problem
@@ -162,7 +147,7 @@ class CONFETTI:
 
             # Check if the optimization actually gave a solution
             if res.X is None:
-                no_solution = no_solution + 1
+                low = window + 1
             else:
                 for x in res.X:
                     x_reshaped = res.X[0].reshape(window, query.shape[1])
@@ -177,22 +162,24 @@ class CONFETTI:
                     row_df = pd.DataFrame(row_dict)
                     solutions = pd.concat([solutions, row_df], ignore_index=True)
 
-            if no_solution == 3:
-                break
+                high = window - 1
+            final_time = time.time() - start_time
+            print(f'This mf took {final_time}')
 
         return solutions
 
     def one_pass(self, test_instance):
-        #Load model
+        # Load model
         model = keras.models.load_model(self.model_path)
         # Find the Nearest Unlike Neighbour
-        nun = self.nearest_unlike_neighbour(self.X_test[test_instance], self.y_pred[test_instance], 'euclidean', 1)[1][0]
+        nun = self.nearest_unlike_neighbour(self.X_test[test_instance], self.y_pred[test_instance], 'euclidean', 1)[1][
+            0]
         # Naive Approach
         naive = self.naive_approach(test_instance, nun, model)
         # Optimization
         optimized = self.optimization(test_instance, nun, model=model, subsequence_length=naive.iloc[0]["Window"])
 
-        return naive, optimized
+        return nun, naive, optimized
 
     def parallelized_counterfactual_generator(self, output_directory=None, save_counterfactuals=True, processes=8):
         self.naive_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
@@ -229,7 +216,6 @@ class CONFETTI:
                 self.nearest_unlike_neighbour(self.X_test[instance], self.y_pred[instance], 'euclidean', 1)[1][0])
         self.nuns = np.array(self.nuns)
 
-
         test_instances = np.array(range(len(self.X_test)))
 
         # Generate the Counterfactuals with the Naive Approach
@@ -241,10 +227,11 @@ class CONFETTI:
 
         if optimization == True:
             # Optimize Counterfactuals
-            self.optimized_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
+            self.optimized_counterfactuals = pd.DataFrame(
+                columns=["Solution", "Window", "Test Instance", "NUN Instance"])
             for test_instance, nun in zip(test_instances, self.nuns):
                 ce_optimized = self.optimization(test_instance, nun,
-                                                 self.naive_counterfactuals.iloc[test_instances]["Window"],self.model)
+                                                 self.naive_counterfactuals.iloc[test_instances]["Window"], self.model)
                 self.optimized_counterfactuals = pd.concat([self.optimized_counterfactuals, ce_optimized],
                                                            ignore_index=True)
 
@@ -261,7 +248,8 @@ class CONFETTI:
             self.naive_counterfactuals.to_csv(output_directory / 'confetti_naive_counterfactuals.csv', index=False)
 
             if optimization:
-                self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv', index=False)
+                self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv',
+                                                      index=False)
 
     def get_naive_counterfactual(self, instance: int):
         if hasattr(self, 'naive_counterfactuals'):
