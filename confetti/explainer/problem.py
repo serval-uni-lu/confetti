@@ -4,7 +4,7 @@ import numpy as np
 
 class CounterfactualProblem(ElementwiseProblem):
     def __init__(self, original_instance: np.array, nun_instance: np.array, nun_index: int, start_timestep: int,
-                 subsequence_length: int, classifier, y_pred_train):
+                 subsequence_length: int, classifier, y_pred_train, alpha=0.5, theta = 0.51):
         self.original_instance = original_instance
         self.nun_instance = nun_instance
         self.nun_index = nun_index
@@ -13,6 +13,8 @@ class CounterfactualProblem(ElementwiseProblem):
         self.classifier = classifier
         self.y_pred_train = y_pred_train
         self.subsequence_length = subsequence_length
+        self.alpha = alpha #Parameter to control the trade-off between precision and sparsity
+        self.theta = theta #Threshold for confidence
         n_var = original_instance.shape[1] * (self.subsequence_length)  # Here, shape[1] are the no. of channels
 
         super().__init__(n_var=n_var, n_obj=2, n_ieq_constr=1)
@@ -35,7 +37,7 @@ class CounterfactualProblem(ElementwiseProblem):
         f2 = np.mean(self.original_instance.flatten() != counterfactual.flatten())
 
         # Objective values. Maximize f1 and minimize f2
-        out["F"] = [-f1, f2]
+        out["F"] = [-self.alpha * f1, (1-self.alpha) * f2]
 
-        # Precision Constraint. Precision needs to be at least 51%
-        out["G"] = [0.51 - f1]
+        # Precision Constraint. Confidence needs to be at least 51%
+        out["G"] = [self.theta - f1]

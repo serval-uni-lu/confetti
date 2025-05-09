@@ -33,7 +33,7 @@ class Evaluator:
                 - DataFrame summarizing the overall evaluation results.
         """
         # Load Data
-        X_train, X_test, y_train, y_test = load_data(dataset, encode_labels=True)
+        X_train, X_test, y_train, y_test = load_data(dataset, one_hot=True)
         timesteps = X_train.shape[1]  # Number of time steps per instance
         channels = X_train.shape[2]  # Number of channels per instance
 

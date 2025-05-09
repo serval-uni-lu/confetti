@@ -1,0 +1,95 @@
+import numpy as np
+import keras
+import pandas as pd
+import tensorflow as tf
+import time
+from tqdm import tqdm
+from pathlib import Path
+from TSInterpret.InterpretabilityModels.counterfactual.SETSCF import SETSCF
+from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv
+import config as cfg
+
+tf.keras.utils.disable_interactive_logging()
+
+
+def run_sets_counterfactuals():
+    datasets = ["AtrialFibrillation"]
+    times_file = cfg.RESULTS_DIR / 'execution_time_sets_fcn.csv'
+    results_directory = cfg.RESULTS_DIR
+    results_directory.mkdir(parents=True, exist_ok=True)
+
+    # Initialize the CSV file with header if it doesn't exist
+    if not times_file.exists():
+        pd.DataFrame(columns=['Dataset', 'Execution Time (seconds)']).to_csv(times_file, index=False)
+
+    for dataset in tqdm(datasets, desc='Processing datasets'):
+        # Sets needs one-hot encoding to be False because it does the One-Hot encoding internally
+        X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
+
+        model_path = cfg.TRAINED_MODELS_DIR / dataset / f'{dataset}_fcn.keras'
+        model = keras.models.load_model(model_path)
+
+        sample_file = f"{cfg.DATA_DIR}/{dataset}_samples.csv"
+        X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
+        print(f"Loaded {dataset} samples from CSV: {X_samples.shape}")
+
+        # Determine time series length (assuming shape is [n_samples, n_channels, series_length])
+        series_length = X_train.shape[2]
+        max_shapelet_len = series_length // 2
+
+        exp_model = SETSCF(model,
+                           (X_train, y_train),
+                           backend='TF',
+                           mode='time',
+                           min_shapelet_len=6,
+                           max_shapelet_len=max_shapelet_len,
+                           time_contract_in_mins_per_dim=0.5,
+                           fit_shapelets=False)
+
+        exp_model.fit(occlusion_threshhold=0.6, remove_multiclass_shapelets=True)
+        print("Explainer created and fitted.")
+
+        results_sets = pd.DataFrame(columns=["Solution", "Test Instance", "Original Label", "CE Label"])
+
+        start_time = time.time()
+        for i, instance in enumerate(tqdm(X_samples, desc=f"Generating CEs for {dataset}")):
+            item = X_samples[i]
+
+            try:
+                cf_explanation, label_cf = exp_model.explain(item, target=None)
+            except AssertionError as e:
+                if "Pertubed instance is identical to the original instance" in str(e):
+                    print(f"No CF found for instance {i}. Appending None.")
+                    cf_explanation, label_cf = None, None
+                else:
+                    raise  # Re-raise if it's a different assertion error
+
+            row_dict = {
+                'Solution': [cf_explanation],
+                'Test Instance': i,
+                'Original Label': y_samples[i],
+                'CE Label': label_cf
+            }
+            row_df = pd.DataFrame(row_dict)
+            results_sets = pd.concat([results_sets, row_df], ignore_index=True)
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+
+        # Save results for the current dataset
+        dataset_result_dir = cfg.RESULTS_DIR / dataset
+        dataset_result_dir.mkdir(parents=True, exist_ok=True)
+        results_sets.to_csv(dataset_result_dir / f'sets_{dataset}_fcn_counterfactuals.csv', index=False)
+        print(f"Results for {dataset} saved to CSV.")
+
+        # Append execution time to the shared CSV
+        new_time_row = pd.DataFrame([[dataset, elapsed_time]], columns=['Dataset', 'Execution Time (seconds)'])
+        new_time_row.to_csv(times_file, mode='a', header=False, index=False)
+        print(f"Execution time for {dataset} saved.")
+
+
+def main():
+    run_sets_counterfactuals()
+
+if __name__ == "__main__":
+    main()

@@ -104,7 +104,8 @@ class CONFETTI:
         counterfactual_df = pd.DataFrame(counterfactual_dict)
         return counterfactual_df
 
-    def optimization(self, instance_index: int, nun_index: int, subsequence_length: int, model):
+    def optimization(self, instance_index: int, nun_index: int, subsequence_length: int, model, alpha=0.5,
+                     theta=0.51):
         # Initialize Values
         query = self.X_test[instance_index]
 
@@ -118,20 +119,19 @@ class CONFETTI:
         while low <= high:
             start_time = time.time()
             window = (low + high) // 2
-            print(f"We are starting the optimization in window {window}")
+            print(f"Optimization of CE for Instance {instance_index} in Window {window}")
             # Timestep where it starts
             starting_point = self.findSubarray((self.weights[nun_index]), window)
             end_point = starting_point + window
 
             # Define the Counterfactual Problem
             problem = CounterfactualProblem(query, nun, nun_index, starting_point, window, model,
-                                            self.y_pred_train)
+                                            self.y_pred_train, alpha, theta)
 
             # create the reference directions to be used for the optimization in NSGA3
             ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=12)
 
             # NGSA-III Algorithm
-
             algorithm = NSGA3(pop_size=100,
                               ref_dirs=ref_dirs,
                               sampling=BinaryRandomSampling(),
@@ -140,7 +140,7 @@ class CONFETTI:
                               )
 
             # Only do 300 generations
-            termination = get_termination("n_gen", 300)
+            termination = get_termination("n_gen", 100)
 
             # Run Optimization
             res = minimize(problem, algorithm, termination, seed=1, verbose=False)
@@ -164,24 +164,30 @@ class CONFETTI:
 
                 high = window - 1
             final_time = time.time() - start_time
-            print(f'This mf took {final_time}')
+            print(f'Instance: {instance_index} | Window: {window} | Time: {final_time}')
 
         return solutions
 
-    def one_pass(self, test_instance):
+    def one_pass(self, test_instance, alpha=0.5, theta=0.51):
         # Load model
         model = keras.models.load_model(self.model_path)
         # Find the Nearest Unlike Neighbour
         nun = self.nearest_unlike_neighbour(self.X_test[test_instance], self.y_pred[test_instance], 'euclidean', 1)[1][
             0]
         # Naive Approach
+        print(f'Naive approach started for instance {test_instance}')
         naive = self.naive_approach(test_instance, nun, model)
+        print(f'Naive approach finished for instance {test_instance}')
         # Optimization
-        optimized = self.optimization(test_instance, nun, model=model, subsequence_length=naive.iloc[0]["Window"])
+        print(f'Optimization stage started for instance {test_instance}')
+        optimized = self.optimization(test_instance, nun, model=model, subsequence_length=naive.iloc[0]["Window"],
+                                      alpha=alpha, theta=theta)
+        print(f'Optimization stage finished for instance {test_instance}')
 
         return nun, naive, optimized
 
-    def parallelized_counterfactual_generator(self, output_directory=None, save_counterfactuals=True, processes=8):
+    def parallelized_counterfactual_generator(self, output_directory=None, save_counterfactuals=True, processes=8,
+                                              alpha=0.5, theta=0.51):
         self.naive_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
         self.optimized_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
 
@@ -207,8 +213,10 @@ class CONFETTI:
             self.naive_counterfactuals.to_csv(output_directory / 'confetti_naive_counterfactuals.csv', index=False)
             self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv',
                                                   index=False)
+            print(f'Counterfactuals saved on {output_directory}')
 
-    def counterfactual_generator(self, directory=None, save_counterfactuals=False, optimization=False):
+    def counterfactual_generator(self, directory=None, save_counterfactuals=False, optimization=False, alpha=0.5,
+                                 theta=0.51):
 
         # Generate Next Unilikely Neighbour
         for instance in range(len(self.X_test)):
@@ -231,7 +239,8 @@ class CONFETTI:
                 columns=["Solution", "Window", "Test Instance", "NUN Instance"])
             for test_instance, nun in zip(test_instances, self.nuns):
                 ce_optimized = self.optimization(test_instance, nun,
-                                                 self.naive_counterfactuals.iloc[test_instances]["Window"], self.model)
+                                                 self.naive_counterfactuals.iloc[test_instances]["Window"], self.model,
+                                                 alpha, theta)
                 self.optimized_counterfactuals = pd.concat([self.optimized_counterfactuals, ce_optimized],
                                                            ignore_index=True)
 

@@ -1,55 +1,117 @@
-import numpy as np
+import config as cfg
 import keras
-from sklearn import preprocessing
 from pathlib import Path
 import warnings
 import confetti.CAM.class_activation_map as cam
 from confetti.explainer.confetti_explainer import CONFETTI
+from confetti.explainer.utils import load_data, get_samples
 import tensorflow as tf
-tf.keras.utils.disable_interactive_logging()
+import pandas as pd
+from tqdm import tqdm
 import time
+import json
+
+tf.keras.utils.disable_interactive_logging()
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 if __name__ == "__main__":
+    # — load or initialize checkpoint.json —
+    cp_path = cfg.RESULTS_DIR / "checkpoint.json"
+    if cp_path.exists():
+        with open(cp_path) as f:
+            checkpoint = json.load(f)
+    else:
+        checkpoint = cfg.CHECK_POINT.copy()
+        cp_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cp_path, "w") as f:
+            json.dump(checkpoint, f, indent=2)
 
-    # Suppress specific warning
-    warnings.filterwarnings("ignore", category=FutureWarning)
+    for dataset, params in checkpoint.items():
+        ce_dir = cfg.RESULTS_DIR / dataset
+        ce_dir.mkdir(parents=True, exist_ok=True)
 
-    from sktime.datasets import load_UCR_UEA_dataset
-    dataset = 'BasicMotions'
+        log_file = ce_dir / "execution_times.csv"
+        if not log_file.exists():
+            pd.DataFrame(columns=['Dataset','Alpha','Theta','Execution Time']) \
+              .to_csv(log_file, index=False)
 
-    #Data will load with shape (instances, dimensions, timesteps)
-    X_train, y_train = load_UCR_UEA_dataset("BasicMotions", split="train", return_type="numpy3d")
-    X_test, y_test = load_UCR_UEA_dataset("BasicMotions", split="test", return_type="numpy3d")
+        # load data, model, explainer
+        X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
+        model = keras.models.load_model(
+            str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_fcn.keras")
+        )
+        if dataset in cfg.NUMBER_OF_SAMPLES_PER_CLASS:
+            X_samples, y_samples = get_samples(dataset, one_hot=False)
+        else:
+            X_samples, y_samples = X_test, y_test
 
-    #Reshape data to (instances, timesteps, dimensions)
-    X_train = X_train.reshape(X_train.shape[0],X_train.shape[2],X_train.shape[1])
-    X_test = X_test.reshape(X_test.shape[0], X_test.shape[2], X_test.shape[1])
+        training_weights = cam.compute_weights_cam(
+            model, X_train, dataset=dataset,
+            save_weights=True, data_type='training'
+        )
+        ce = CONFETTI(
+            str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_fcn.keras"),
+            X_train, X_samples, y_samples, y_train, training_weights
+        )
 
-    #Encode
-    le = preprocessing.LabelEncoder()
-    y_train = le.fit_transform(y_train)
-    y_test = le.transform(y_test)
+        # — Experiment 1: remaining alphas —
+        alphas = params.get('alphas', [])
+        for alpha in tqdm(alphas.copy(),
+                          desc=f"{dataset} ⟶ alphas ({len(alphas)} remaining)",
+                          leave=False):
+            start = time.time()
+            ces = ce.parallelized_counterfactual_generator(
+                ce_dir,
+                save_counterfactuals=True,
+                processes=4,
+                alpha=alpha,
+                theta=cfg.FIXED_THETA
+            )
+            elapsed = time.time() - start
 
-    #One Hot the labels for the CNN
-    y_train_encoded, y_test_encoded = keras.utils.to_categorical(y_train), keras.utils.to_categorical(y_test)
+            # save CFs + timing
+            pd.DataFrame(ces).to_csv(
+                ce_dir / f"ces_{dataset}_alpha_{alpha}.csv", index=False
+            )
+            pd.DataFrame([{
+                'Dataset': dataset,
+                'Alpha': alpha,
+                'Theta': cfg.FIXED_THETA,
+                'Execution Time': elapsed
+            }]).to_csv(log_file, mode='a', header=False, index=False)
 
+            # remove from checkpoint & persist
+            params['alphas'].pop(0)
+            with open(cp_path, "w") as f:
+                json.dump(checkpoint, f, indent=2)
 
-    nb_classes = len(np.unique(np.concatenate([y_train,y_test])))
-    input_shape = X_train.shape[1:] #The input shape for our CNN should be (timesteps, dimensions)
+        # — Experiment 2: remaining thetas —
+        thetas = params.get('thetas', [])
+        for theta in tqdm(thetas.copy(),
+                          desc=f"{dataset} ⟶ thetas ({len(thetas)} remaining)",
+                          leave=False):
+            start = time.time()
+            ces = ce.parallelized_counterfactual_generator(
+                ce_dir,
+                save_counterfactuals=True,
+                processes=4,
+                alpha=cfg.FIXED_ALPHA,
+                theta=theta
+            )
+            elapsed = time.time() - start
 
+            # save CFs + timing
+            pd.DataFrame(ces).to_csv(
+                ce_dir / f"ces_{dataset}_theta_{theta}.csv", index=False
+            )
+            pd.DataFrame([{
+                'Dataset': dataset,
+                'Alpha': cfg.FIXED_ALPHA,
+                'Theta': theta,
+                'Execution Time': elapsed
+            }]).to_csv(log_file, mode='a', header=False, index=False)
 
-    #Load trained model
-    # Ensure the path is always relative to the project root
-    model_path = "/Users/alan.paredes/Desktop/confetti/models/trained_models/BasicMotions/BasicMotions_fcn.keras"
-    # Load the model
-    model = keras.models.load_model(str(model_path))
-
-
-
-    testing_weights = cam.compute_weights_cam(model, X_test, dataset=dataset, save_weights=True, data_type='testing')
-
-
-
-    ce = CONFETTI(model_path, X_train, X_test[:1], y_test[:1], y_train, testing_weights)
-
-    ce_directory = Path.cwd().parent/ "results" / dataset
-    ce.parallelized_counterfactual_generator(ce_directory,save_counterfactuals=True,processes=1)
+            # remove from checkpoint & persist
+            params['thetas'].pop(0)
+            with open(cp_path, "w") as f:
+                json.dump(checkpoint, f, indent=2)
