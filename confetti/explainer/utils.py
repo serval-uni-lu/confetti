@@ -12,9 +12,9 @@ def convert_string_to_array(data_string, timesteps, channels):
     # Convert the cleaned string to a numpy array
     array_data = np.fromstring(cleaned_data, sep=' ')
 
-    # Reshape the array into the correct dimensions (100, 6)
+    # Reshape the array into the correct dimensions
     # Ensure the correct total number of elements before reshaping
-    if array_data.size == timesteps * channels:  # 100 * 6
+    if array_data.size == timesteps * channels:
         final_array = array_data.reshape(timesteps, channels)
         return final_array
     else:
@@ -96,8 +96,6 @@ def save_multivariate_ts_as_csv(file_path, X, y):
     labels_df.to_csv(file_path.replace(".csv", "_labels.csv"), index=False)
     print(f"Saved dataset to {file_path} and labels to {file_path.replace('.csv', '_labels.csv')}")
 
-
-
 def load_multivariate_ts_from_csv(file_path):
     """
     Load a multivariate time series dataset from CSV and reshape it back to its original form.
@@ -122,6 +120,8 @@ def load_multivariate_ts_from_csv(file_path):
 
     return X, y
 
+def array_to_string(arr):
+    return ' '.join(map(str, arr.flatten()))
 
 
 

@@ -12,14 +12,27 @@ from pymoo.operators.crossover.pntx import TwoPointCrossover
 from pymoo.operators.mutation.bitflip import BitflipMutation
 from pymoo.operators.sampling.rnd import BinaryRandomSampling
 from multiprocessing import Pool
+from functools import partial
 from pymoo.termination import get_termination
 from .problem import CounterfactualProblem
-from .utils import convert_string_to_array
+from .utils import convert_string_to_array, array_to_string
 import time
+import tensorflow as tf
+tf.keras.utils.disable_interactive_logging()
 
 
 class CONFETTI:
     def __init__(self, model_path, X_train, X_test, y_test, y_train, weights):
+        """
+        Initialize the CONFETTI explainer with the model and data.
+        Args:
+            model_path: Path to the trained model
+            X_train: Data that was used to train the model.
+            X_test: Instances to be explained
+            y_test: Labels of the instances to be explained
+            y_train: Labels of the training data.
+            weights: Model weights for the training data.
+        """
         self.model_path = model_path
         self.model = keras.models.load_model(model_path)
         self.X_train = X_train
@@ -31,8 +44,15 @@ class CONFETTI:
         self.weights = weights
         self.nuns = []
 
-    def findSubarray(self, a: list,
-                     k: int):  # used to find the maximum contiguous subarray of length k in the explanation weight vector
+    def findSubarray(self, a: list, k: int):
+        """
+        Find the starting index of the maximum contiguous subarray of length k in a list.
+        Args:
+            a: list of values
+            k: length of the subarray to be found
+
+        Returns: Starting index of the maximum contiguous subarray of length k
+        """
         start = 0
         max_sum = curr_sum = sum(a[start:start + k])
         for i in range(1, len(a) - k + 1):
@@ -85,7 +105,7 @@ class CONFETTI:
         prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]), verbose=0)[0][
             self.y_pred_train[nun]]
 
-        while prob_target <= 0.5:
+        while prob_target <= 0.51:
             subarray_length += 1
             # Timestep where it starts
             starting_point = self.findSubarray((self.weights[nun]), subarray_length)
@@ -98,7 +118,6 @@ class CONFETTI:
             # Feed new instance to model and check if the probability target changed.
             prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]),verbose=0)[0][
                 self.y_pred_train[nun]]
-
         counterfactual_dict = {'Solution': [counterfactual], 'Window': subarray_length,
                                'Test Instance': instance, 'NUN Instance': nun}
         counterfactual_df = pd.DataFrame(counterfactual_dict)
@@ -192,7 +211,8 @@ class CONFETTI:
         self.optimized_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
 
         pool = Pool(processes=processes)
-        res = pool.map(self.one_pass, range(len(self.X_test)))
+        wrapped_one_pass = partial(self.one_pass, alpha=alpha, theta=theta)
+        res = pool.map(wrapped_one_pass, range(len(self.X_test)))
         pool.close()
         pool.join()
 
@@ -209,11 +229,16 @@ class CONFETTI:
             output_directory = Path(output_directory) if output_directory else Path.cwd()
             output_directory.mkdir(parents=True, exist_ok=True)
 
+            # Convert Solution arrays to space-separated strings for CSV compatibility
+            self.naive_counterfactuals['Solution'] = self.naive_counterfactuals['Solution'].apply(array_to_string)
+            self.optimized_counterfactuals['Solution'] = self.optimized_counterfactuals['Solution'].apply(array_to_string)
+
             # Save files as csv
-            self.naive_counterfactuals.to_csv(output_directory / 'confetti_naive_counterfactuals.csv', index=False)
+            self.naive_counterfactuals.to_csv(output_directory / f'confetti_naive_counterfactuals.csv', index=False)
             self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv',
                                                   index=False)
             print(f'Counterfactuals saved on {output_directory}')
+        return self.naive_counterfactuals, self.optimized_counterfactuals
 
     def counterfactual_generator(self, directory=None, save_counterfactuals=False, optimization=False, alpha=0.5,
                                  theta=0.51):
@@ -233,7 +258,7 @@ class CONFETTI:
             naives = self.naive_approach(test_instance, nun, self.model)
             self.naive_counterfactuals = pd.concat([self.naive_counterfactuals, naives], ignore_index=True)
 
-        if optimization == True:
+        if optimization:
             # Optimize Counterfactuals
             self.optimized_counterfactuals = pd.DataFrame(
                 columns=["Solution", "Window", "Test Instance", "NUN Instance"])
@@ -253,10 +278,15 @@ class CONFETTI:
             output_directory = Path(directory) if directory else Path.cwd()
             output_directory.mkdir(parents=True, exist_ok=True)
 
+            # Convert Solution arrays to space-separated strings for CSV compatibility
+            self.naive_counterfactuals['Solution'] = self.naive_counterfactuals['Solution'].apply(array_to_string)
+
             # Save the naive counterfactuals
             self.naive_counterfactuals.to_csv(output_directory / 'confetti_naive_counterfactuals.csv', index=False)
 
             if optimization:
+                self.optimized_counterfactuals['Solution'] = self.optimized_counterfactuals['Solution'].apply(
+                    array_to_string)
                 self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv',
                                                       index=False)
 

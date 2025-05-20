@@ -6,7 +6,7 @@ import time
 from tqdm import tqdm
 from pathlib import Path
 from TSInterpret.InterpretabilityModels.counterfactual.TSEvoCF import TSEvo
-from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv
+from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv, array_to_string
 import config as cfg
 from keras.utils import to_categorical
 
@@ -65,6 +65,7 @@ def run_tsevo_counterfactuals():
         end_time = time.time()
         times[dataset] = end_time - start_time
 
+        results_df["Solution"] = results_df["Solution"].apply(array_to_string)
         results_directory = cfg.RESULTS_DIR / dataset
         results_directory.mkdir(parents=True, exist_ok=True)
         results_df.to_csv(results_directory / f'tsevo_{dataset}_fcn_counterfactuals.csv', index=False)

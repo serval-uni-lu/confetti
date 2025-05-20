@@ -34,7 +34,7 @@ _DEFAULT_THETAS = [0.55, 0.65, 0.75, 0.85, 0.95]
 # checkpoint dict for “breaks” logic
 CHECK_POINT = {
     'ArticularyWordRecognition': {
-        'alphas':  [],               # already done
+        'alphas':  _DEFAULT_ALPHAS.copy(),
         'thetas':  _DEFAULT_THETAS.copy()
     },
     'BasicMotions': {

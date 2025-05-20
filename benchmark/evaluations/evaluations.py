@@ -1,26 +1,27 @@
 import pandas as pd
 from evaluator import Evaluator
 
-# Initialize Evaluators
-confetti_ev = Evaluator('confetti_naive')
-comte_ev = Evaluator('comte')
-sets_ev = Evaluator('sets')
-tsevo_ev = Evaluator('tsevo')
+# Initialize Evaluator
+ev = Evaluator()
 
 # Evaluate datasets
-confetti_bm, confetti_bm_summary = confetti_ev.evaluate_dataset('BasicMotions')
-comte_bm, comte_bm_summary = comte_ev.evaluate_dataset('BasicMotions')
-sets_bm, sets_bm_summary = sets_ev.evaluate_dataset('BasicMotions')
-tsevo_bm, tsevo_bm_summary = tsevo_ev.evaluate_dataset('BasicMotions')
+comte_bm, comte_bm_summary = ev.evaluate_dataset('comte', 'BasicMotions', 'fcn')
+sets_bm, sets_bm_summary = ev.evaluate_dataset('sets', 'BasicMotions', 'fcn')
+tsevo_bm, tsevo_bm_summary = ev.evaluate_dataset('tsevo', 'BasicMotions', 'fcn')
+naive_bm, naive_bm_summary = ev.evaluate_dataset('confetti_naive', 'BasicMotions',
+                                                 'fcn', alpha=True, param_config=0.1)
+optimized_bm, optimized_bm_summary = ev.evaluate_dataset('confetti_optimized', 'BasicMotions',
+                                                            'fcn', alpha=True, param_config=0.1)
 
 # Add "Explainer" column
-confetti_bm_summary["Explainer"] = "Confetti"
 comte_bm_summary["Explainer"] = "Comte"
 sets_bm_summary["Explainer"] = "Sets"
 tsevo_bm_summary["Explainer"] = "TSEvo"
+naive_bm_summary["Explainer"] = "Confetti Naive"
+optimized_bm_summary["Explainer"] = "Confetti Optimized"
 
 # Concatenate all dataframes
-final_df = pd.concat([confetti_bm_summary, comte_bm_summary, sets_bm_summary, tsevo_bm_summary], ignore_index=True)
+final_df = pd.concat([comte_bm_summary, sets_bm_summary, tsevo_bm_summary, naive_bm_summary,optimized_bm_summary], ignore_index=True)
 
 # Display final dataframe
 print(final_df)

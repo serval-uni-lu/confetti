@@ -6,7 +6,7 @@ import time
 from tqdm import tqdm
 from pathlib import Path
 from TSInterpret.InterpretabilityModels.counterfactual.SETSCF import SETSCF
-from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv
+from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv, array_to_string
 import config as cfg
 
 tf.keras.utils.disable_interactive_logging()
@@ -77,6 +77,7 @@ def run_sets_counterfactuals():
         elapsed_time = end_time - start_time
 
         # Save results for the current dataset
+        results_sets["Solution"] = results_sets["Solution"].apply(array_to_string)
         dataset_result_dir = cfg.RESULTS_DIR / dataset
         dataset_result_dir.mkdir(parents=True, exist_ok=True)
         results_sets.to_csv(dataset_result_dir / f'sets_{dataset}_fcn_counterfactuals.csv', index=False)

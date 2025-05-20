@@ -7,7 +7,7 @@ from tqdm import tqdm
 from pathlib import Path
 from TSInterpret.InterpretabilityModels.counterfactual.COMTECF import COMTECF
 from TSInterpret.InterpretabilityModels.counterfactual.COMTE.Optimization import OptimizedSearch
-from confetti.explainer.utils import load_data, get_samples, load_multivariate_ts_from_csv
+from confetti.explainer.utils import load_data, get_samples, load_multivariate_ts_from_csv, array_to_string
 import config as cfg
 tf.keras.utils.disable_interactive_logging()
 
@@ -64,6 +64,7 @@ def run_comte_counterfactuals():
         elapsed_time = end_time - start_time
 
         # Save counterfactuals
+        results_comte['Solution'] = results_comte['Solution'].apply(array_to_string)
         dataset_result_dir = cfg.RESULTS_DIR / dataset
         dataset_result_dir.mkdir(parents=True, exist_ok=True)
         results_comte.to_csv(dataset_result_dir / f'comte_{dataset}_fcn_counterfactuals.csv', index=False)
