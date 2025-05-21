@@ -26,7 +26,7 @@ if __name__ == "__main__":
         with open(cp_path, "w") as f:
             json.dump(checkpoint, f, indent=2)
 
-    time_file = cfg.RESULTS_DIR / "execution_times_confetti.csv"
+    time_file = cfg.RESULTS_DIR / "execution_times_confetti_fcn.csv"
     if not time_file.exists():
         pd.DataFrame(columns=['Dataset', 'Alpha', 'Theta', 'Execution Time']) \
             .to_csv(time_file, index=False)

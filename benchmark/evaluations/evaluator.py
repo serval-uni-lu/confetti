@@ -110,7 +110,7 @@ class Evaluator:
         for i in range(len(counterfactuals)):
             instance = counterfactuals.iloc[i]['Test Instance']
             original_label = np.argmax(model.predict(X_test[instance].reshape(1, timesteps, channels)))
-            counterfactual = convert_string_to_array(counterfactuals.iloc[instance]['Solution'],
+            counterfactual = convert_string_to_array(counterfactuals.iloc[i]['Solution'],
                                                      timesteps=timesteps, channels=channels)
 
             # Compute Sparsity (how many unchanged features)
