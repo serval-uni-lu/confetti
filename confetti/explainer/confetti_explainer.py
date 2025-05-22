@@ -63,6 +63,53 @@ class CONFETTI:
                 start = i
         return start
 
+    def nearest_unlike_neighbour(self, query, predicted_label, distance, n_neighbors, theta=0.51):
+        """
+        Find the Nearest Unlike Neighbour (nun) for each instance in the Test Dataset,
+        with additional constraint on prediction confidence.
+
+        Args:
+            query: the instance for which we want to find its nun
+            predicted_label: the classifier's predicted label for the query
+            distance: distance metric to be used for the KNeighborsTimeSeries
+            n_neighbors: number of neighbors to be retrieved
+            theta: minimum prediction probability for the neighbor's class
+        """
+        # Label DataFrame
+        df = pd.DataFrame(self.y_train, columns=['label'])
+        df.index.name = 'index'
+
+        # Only keep unlike-labels
+        unlike_mask = df['label'] != predicted_label
+        unlike_indices = df[unlike_mask].index
+        X_unlike = self.X_train[list(unlike_indices)]
+
+        # Fit KNN on unlike instances
+        knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance)
+        knn.fit(X_unlike)
+
+        # Get nearest neighbors
+        dist, ind = knn.kneighbors(query.reshape(1, query.shape[0], query.shape[1]), return_distance=True)
+        actual_indices = unlike_indices[ind[0]]
+        candidate_X = self.X_train[actual_indices]
+
+        # Use model.predict to get class probabilities
+        prob_array = self.model.predict(candidate_X)  # shape: [n_candidates, n_classes]
+
+        # Get predicted confidence (i.e., max prob per candidate)
+        confidences = np.max(prob_array, axis=1)
+
+        # Filter by confidence threshold
+        keep_mask = confidences >= theta
+        if not any(keep_mask):
+            return None, None  # Or handle fallback case
+
+        # Return filtered distances and corresponding indices
+        final_distances = dist[0][keep_mask]
+        final_indices = actual_indices[keep_mask]
+
+        return final_distances, final_indices
+    '''
     def nearest_unlike_neighbour(self, query, predicted_label, distance, n_neighbors):
         """
         Find the Nearest Unlike Neighbour (nun) for each instance in the Test Dataset
@@ -84,8 +131,8 @@ class CONFETTI:
         dist, ind = knn.kneighbors(query.reshape(1, query.shape[0], query.shape[1]), return_distance=True)
 
         return dist[0], df[df['label'] != predicted_label].index[ind[0][:]]
-
-    def naive_approach(self, instance, nun, model, subarray_length=1):
+    '''
+    def naive_approach(self, instance, nun, model, subarray_length=1, theta=0.51):
         """
         Swap the original instance's values for those of the nearest unlike neighbour (nun). Naive Approach.
 
@@ -105,7 +152,7 @@ class CONFETTI:
         prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]), verbose=0)[0][
             self.y_pred_train[nun]]
 
-        while prob_target <= 0.51:
+        while prob_target <= theta:
             subarray_length += 1
             # Timestep where it starts
             starting_point = self.findSubarray((self.weights[nun]), subarray_length)
@@ -191,8 +238,14 @@ class CONFETTI:
         # Load model
         model = keras.models.load_model(self.model_path)
         # Find the Nearest Unlike Neighbour
-        nun = self.nearest_unlike_neighbour(self.X_test[test_instance], self.y_pred[test_instance], 'euclidean', 1)[1][
-            0]
+        nun = self.nearest_unlike_neighbour(query=self.X_test[test_instance],
+                                            predicted_label=self.y_pred[test_instance],
+                                            distance= 'euclidean',
+                                            n_neighbors=1,
+                                            theta=theta)[1][0]
+        if nun is None:
+            print(f'No NUN found for instance {test_instance} with this theta.')
+            return None, None, None
         # Naive Approach
         print(f'Naive approach started for instance {test_instance}')
         naive = self.naive_approach(test_instance, nun, model)
@@ -217,9 +270,13 @@ class CONFETTI:
         pool.join()
 
         for r in res:
-            self.nuns.append(r[0])
-            self.naive_counterfactuals = pd.concat([self.naive_counterfactuals, r[1]], ignore_index=True)
-            self.optimized_counterfactuals = pd.concat([self.optimized_counterfactuals, r[2]], ignore_index=True)
+            nun, naive_df, optimized_df = r
+            self.nuns.append(nun)
+            if naive_df is not None:
+                self.naive_counterfactuals = pd.concat([self.naive_counterfactuals, naive_df], ignore_index=True)
+            if optimized_df is not None:
+                self.optimized_counterfactuals = pd.concat([self.optimized_counterfactuals, optimized_df],
+                                                           ignore_index=True)
 
         self.optimized_counterfactuals = self.optimized_counterfactuals.groupby('Test Instance', as_index=False).apply(
             lambda x: x.drop_duplicates(subset='Window')).reset_index(drop=True)
@@ -238,40 +295,61 @@ class CONFETTI:
             self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv',
                                                   index=False)
             print(f'Counterfactuals saved on {output_directory}')
+
         return self.naive_counterfactuals, self.optimized_counterfactuals
 
     def counterfactual_generator(self, directory=None, save_counterfactuals=False, optimization=False, alpha=0.5,
                                  theta=0.51):
 
-        # Generate Next Unilikely Neighbour
+        valid_instances = []
+        # Find NUNs (may return None)
         for instance in range(len(self.X_test)):
-            self.nuns.append(
-                self.nearest_unlike_neighbour(self.X_test[instance], self.y_pred[instance], 'euclidean', 1)[1][0])
+            result = self.nearest_unlike_neighbour(query=self.X_test[instance],
+                                                   predicted_label=self.y_pred[instance],
+                                                   distance='euclidean',
+                                                   n_neighbours=1,
+                                                   theta=theta)
+            if result is not None and result[1] is not None and len(result[1]) > 0:
+                self.nuns.append(result[1][0])
+                valid_instances.append(instance)
+            else:
+                print(f"Skipping instance {instance}: No valid NUN found.")
+
         self.nuns = np.array(self.nuns)
+        test_instances = np.array(valid_instances)
 
-        test_instances = np.array(range(len(self.X_test)))
-
-        # Generate the Counterfactuals with the Naive Approach
-        self.naive_counterfactuals = pd.DataFrame(
-            columns=["Solution", "Window", "Test Instance", "NUN Instance"])
+            # Naive Counterfactuals
+        self.naive_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
         for test_instance, nun in zip(test_instances, self.nuns):
-            naives = self.naive_approach(test_instance, nun, self.model)
-            self.naive_counterfactuals = pd.concat([self.naive_counterfactuals, naives], ignore_index=True)
+            naive_df = self.naive_approach(test_instance, nun, self.model, theta=theta)
+            if naive_df is not None:
+                self.naive_counterfactuals = pd.concat([self.naive_counterfactuals, naive_df], ignore_index=True)
 
         if optimization:
-            # Optimize Counterfactuals
-            self.optimized_counterfactuals = pd.DataFrame(
-                columns=["Solution", "Window", "Test Instance", "NUN Instance"])
-            for test_instance, nun in zip(test_instances, self.nuns):
-                ce_optimized = self.optimization(test_instance, nun,
-                                                 self.naive_counterfactuals.iloc[test_instances]["Window"], self.model,
-                                                 alpha, theta)
-                self.optimized_counterfactuals = pd.concat([self.optimized_counterfactuals, ce_optimized],
-                                                           ignore_index=True)
+            self.optimized_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
+
+            for test_instance in test_instances:
+                # Filter naive counterfactuals for this test instance
+                naive_row = self.naive_counterfactuals[
+                    self.naive_counterfactuals["Test Instance"] == test_instance]
+
+                if naive_row.empty:
+                    print(f"Skipping optimization for instance {test_instance}: no naive counterfactual found.")
+                    continue  # No naive CE means we cannot optimize
+
+                window_val = naive_row["Window"].iloc[0]
+                nun = self.nuns[test_instances.tolist().index(test_instance)]
+
+                opt_df = self.optimization(test_instance, nun, window_val, self.model, alpha, theta)
+                if opt_df is not None:
+                    self.optimized_counterfactuals = pd.concat(
+                        [self.optimized_counterfactuals, opt_df], ignore_index=True
+                    )
 
             self.optimized_counterfactuals = self.optimized_counterfactuals.groupby('Test Instance',
                                                                                     as_index=False).apply(
-                lambda x: x.drop_duplicates(subset='Window')).reset_index(drop=True)
+                lambda x: x.drop_duplicates(subset='Window')
+            ).reset_index(drop=True)
 
         if save_counterfactuals:
             # Create the directory if it doesn't exist
@@ -291,25 +369,29 @@ class CONFETTI:
                                                       index=False)
 
     def get_naive_counterfactual(self, instance: int):
-        if hasattr(self, 'naive_counterfactuals'):
-            return self.naive_counterfactuals[self.naive_counterfactuals["Test Instance"] == instance].iloc[0][0]
-        else:
+        if not hasattr(self, 'naive_counterfactuals'):
             raise AttributeError(
-                "Counterfactuals attribute does not exist yet. Please first run the function 'counterfactual_generator")
+                "Counterfactuals attribute does not exist yet. Please first run the function 'counterfactual_generator'")
 
+        ce_instance = self.naive_counterfactuals[self.naive_counterfactuals["Test Instance"] == instance]
+        if ce_instance.empty:
+            raise ValueError(f"No naive counterfactual found for instance {instance}.")
+
+        return ce_instance.iloc[0][0]
     def get_optimized_counterfactual(self, instance: int, precision: bool):
-        if hasattr(self, 'optimized_counterfactuals'):
-            # Get the counterfactuals for instance x
-            ce_instance = self.optimized_counterfactuals[self.optimized_counterfactuals["Test Instance"] == instance]
-            if precision == True:
-                # Return the counterfactual with highest precision
-                return ce_instance.sort_values("Precision", ascending=False).iloc[0][0]
-            else:
-                # Return the counterfactual with highest sparsity
-                return ce_instance.sort_values("Sparsity", ascending=False).iloc[0][0]
-        else:
+        if not hasattr(self, 'optimized_counterfactuals'):
             raise AttributeError(
-                "Optimized Counterfactuals have not been generated yet. Run 'counterfactual_generator' with arg 'optimization' as True")
+                "Optimized Counterfactuals have not been generated yet. Run 'counterfactual_generator' with arg 'optimization' as True"
+            )
+
+        ce_instance = self.optimized_counterfactuals[self.optimized_counterfactuals["Test Instance"] == instance]
+        if ce_instance.empty:
+            raise ValueError(f"No optimized counterfactual found for instance {instance}.")
+
+        if precision:
+            return ce_instance.sort_values("Precision", ascending=False).iloc[0][0]
+        else:
+            return ce_instance.sort_values("Sparsity", ascending=False).iloc[0][0]
 
     def visualize_counterfactuals(self, instance: int, optimized=False, precision=True):
         sample = self.X_test[instance]
