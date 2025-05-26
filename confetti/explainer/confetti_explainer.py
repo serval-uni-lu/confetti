@@ -109,29 +109,7 @@ class CONFETTI:
         final_indices = actual_indices[keep_mask]
 
         return final_distances, final_indices
-    '''
-    def nearest_unlike_neighbour(self, query, predicted_label, distance, n_neighbors):
-        """
-        Find the Nearest Unlike Neighbour (nun) for each instance in the Test Dataset
 
-        Args:
-            query: the instance for which we want to find its nun
-            predicted_label = the classifier's predicted label for the query
-            distance = distance metric to be used for the KNeighborsTimeSeries
-            n_neighbors = number of neighbors to be retrieved
-        """
-        df = pd.DataFrame(self.y_train, columns=['label'])
-        df.index.name = 'index'
-
-        knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance)
-
-        # Fit the KNN Algorithm with those instances that ARE NOT labelled as the Predicted Label
-        knn.fit(self.X_train[list(df[df['label'] != predicted_label].index.values)])
-
-        dist, ind = knn.kneighbors(query.reshape(1, query.shape[0], query.shape[1]), return_distance=True)
-
-        return dist[0], df[df['label'] != predicted_label].index[ind[0][:]]
-    '''
     def naive_approach(self, instance, nun, model, subarray_length=1, theta=0.51):
         """
         Swap the original instance's values for those of the nearest unlike neighbour (nun). Naive Approach.
@@ -165,6 +143,7 @@ class CONFETTI:
             # Feed new instance to model and check if the probability target changed.
             prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]),verbose=0)[0][
                 self.y_pred_train[nun]]
+        print(f'Probability target is {theta} and the CE is {prob_target}')
         counterfactual_dict = {'Solution': [counterfactual], 'Window': subarray_length,
                                'Test Instance': instance, 'NUN Instance': nun}
         counterfactual_df = pd.DataFrame(counterfactual_dict)
@@ -238,17 +217,23 @@ class CONFETTI:
         # Load model
         model = keras.models.load_model(self.model_path)
         # Find the Nearest Unlike Neighbour
-        nun = self.nearest_unlike_neighbour(query=self.X_test[test_instance],
+        nun_result = self.nearest_unlike_neighbour(query=self.X_test[test_instance],
                                             predicted_label=self.y_pred[test_instance],
                                             distance= 'euclidean',
                                             n_neighbors=1,
-                                            theta=theta)[1][0]
-        if nun is None:
+                                            theta=theta)
+        if nun_result[0] is None:
             print(f'No NUN found for instance {test_instance} with this theta.')
             return None, None, None
+        else:
+            nun = nun_result[1][0]
+
         # Naive Approach
         print(f'Naive approach started for instance {test_instance}')
-        naive = self.naive_approach(test_instance, nun, model)
+        naive = self.naive_approach(instance=test_instance,
+                                    nun=nun,
+                                    model=model,
+                                    theta=theta)
         print(f'Naive approach finished for instance {test_instance}')
         # Optimization
         print(f'Optimization stage started for instance {test_instance}')

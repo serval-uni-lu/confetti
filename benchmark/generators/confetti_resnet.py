@@ -4,7 +4,7 @@ from pathlib import Path
 import warnings
 import confetti.CAM.class_activation_map as cam
 from confetti.explainer.confetti_explainer import CONFETTI
-from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv
+from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv, array_to_string
 import tensorflow as tf
 import pandas as pd
 from tqdm import tqdm
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         sample_file = f"{cfg.DATA_DIR}/{dataset}_samples.csv"
         X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
         training_weights = cam.compute_weights_cam(model=model, X_data=X_train, dataset=dataset,
-                                                   save_weights=False, data_type='training')
+                                                   save_weights=True, data_type='training')
 
         #Create Explainer
         ce = CONFETTI(model_path, X_train, X_samples, y_samples, y_train, training_weights)
@@ -63,6 +63,10 @@ if __name__ == "__main__":
                 theta=cfg.FIXED_THETA
             )
             elapsed = time.time() - start
+
+            # Convert Solution arrays to space-separated strings for CSV compatibility
+            ces_naive["Solution"] = ces_naive["Solution"].apply(array_to_string)
+            ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
 
             # save CFs + timing
             ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_resnet_alpha_{alpha}.csv", index=False)
@@ -94,6 +98,10 @@ if __name__ == "__main__":
                 theta=theta
             )
             elapsed = time.time() - start
+
+            # Convert Solution arrays to space-separated strings for CSV compatibility
+            ces_naive["Solution"] = ces_naive["Solution"].apply(array_to_string)
+            ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
 
             # save CFs + timing
             ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_resnet_theta_{theta}.csv", index=False)
