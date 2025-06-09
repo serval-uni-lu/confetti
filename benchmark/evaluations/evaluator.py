@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+from numpy.f2py.crackfortran import param_parse
+
 from confetti.explainer.utils import load_data, convert_string_to_array, load_multivariate_ts_from_csv
 import keras
 import config as cfg
@@ -68,13 +70,14 @@ class Evaluator:
 
         return counterfactuals_metrics, dataset_summary
 
-    def evaluate_results(self, model, dataset: str, counterfactuals:pd.DataFrame, sample: np.array, og_labels: np.array,
-                         timesteps: int, channels: int):
+    def evaluate_results(self, model, explainer:str, dataset: str, counterfactuals:pd.DataFrame, sample: np.array, og_labels: np.array,
+                         timesteps: int, channels: int, alpha: bool = True, param_config: float = 0.0):
         """
         Evaluates the counterfactuals using the provided test data.
 
         Args:
             model: The model to evaluate.
+            explainer (str): The name of the explainer.
             dataset (str): The name of the dataset.
             counterfactuals (DataFrame): The counterfactuals to evaluate.
             sample (np.array): The sample set containing original instances.
@@ -94,9 +97,12 @@ class Evaluator:
                                                          timesteps=timesteps,
                                                          channels=channels)
         dataset_summary = self.__get_dataset_summary(dataset=dataset,
+                                                        explainer=explainer,
                                                         sample=sample,
                                                         counterfactuals=counterfactuals,
-                                                        metrics=counterfactuals_metrics)
+                                                        metrics=counterfactuals_metrics,
+                                                        alpha=alpha,
+                                                        param_config=param_config)
 
         return counterfactuals_metrics, dataset_summary
 
@@ -169,12 +175,12 @@ class Evaluator:
                                         'Proximity L1': proximity_l1, 'Proximity L2': proximity_l2, 'Proximity MAD': proximity_MAD}
                     row_results_df = pd.DataFrame([row_results_dict])
                     metrics = pd.concat([metrics, row_results_df], ignore_index=True)
-
             else:
                 # If no counterfactual is found, skip instance
+                print(f"No counterfactual found for instance {i} in dataset. Skipping...")
                 continue
 
-            return metrics
+        return metrics
 
     def __get_model(self, dataset: str, model:str):
         """

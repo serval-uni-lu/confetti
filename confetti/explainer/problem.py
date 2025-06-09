@@ -45,13 +45,6 @@ class CounterfactualProblem(Problem):
                      counterfactuals[:, self.start_timestep:self.end_timestep, :])
         )
 
-        #x_reshaped = x.reshape(self.subsequence_length, self.original_instance.shape[1])
-        #counterfactual = np.copy(self.original_instance)
-        #counterfactual[self.start_timestep:self.end_timestep][x_reshaped] = \
-        #self.nun_instance[self.start_timestep:self.end_timestep][x_reshaped]
-
-        # Reshape counterfactual correctly as expected by classifier
-        #counterfactual = counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1])
 
         # Confidence Formula
         f1 = self.classifier.predict(counterfactuals)[:, self.y_pred_train[self.nun_index]]
