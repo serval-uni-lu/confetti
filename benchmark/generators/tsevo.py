@@ -13,14 +13,14 @@ from keras.utils import to_categorical
 tf.keras.utils.disable_interactive_logging()
 
 
-def run_tsevo_counterfactuals():
+def run_tsevo_counterfactuals(model_name=None):
     datasets = cfg.DATASETS
     times = {}
 
     for dataset in tqdm(datasets, desc='Processing datasets'):
         X_train, X_test, y_train, y_test = load_data(dataset, one_hot=True)
 
-        model_path = cfg.TRAINED_MODELS_DIR / dataset / f'{dataset}_resnet.keras'
+        model_path = cfg.TRAINED_MODELS_DIR / dataset / f'{dataset}_{model_name}.keras'
         model = keras.models.load_model(str(model_path))
 
         sample_file = f"{cfg.DATA_DIR}/{dataset}_samples.csv"
@@ -68,16 +68,16 @@ def run_tsevo_counterfactuals():
         results_df["Solution"] = results_df["Solution"].apply(array_to_string)
         results_directory = cfg.RESULTS_DIR / dataset
         results_directory.mkdir(parents=True, exist_ok=True)
-        results_df.to_csv(results_directory / f'tsevo_{dataset}_resnet_counterfactuals.csv', index=False)
+        results_df.to_csv(results_directory / f'tsevo_{dataset}_{model_name}_counterfactuals.csv', index=False)
         print(f"Results for {dataset} saved to CSV.")
 
     results_directory = cfg.RESULTS_DIR
     times_df = pd.DataFrame(times.items(), columns=['Dataset', 'Execution Time (seconds)'])
-    times_df.to_csv(results_directory / 'execution_time_resnet_tsevo.csv', index=False)
+    times_df.to_csv(results_directory / f'execution_time_{model_name}_tsevo.csv', index=False)
     print("Execution times saved.")
 
 def main():
-    run_tsevo_counterfactuals()
+    run_tsevo_counterfactuals(model_name='resnet')
 
 if __name__ == "__main__":
     main()

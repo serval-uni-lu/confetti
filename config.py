@@ -21,7 +21,7 @@ NUMBER_OF_SAMPLES_PER_CLASS = {
 
 #Datasets to Test
 DATASETS = ['ArticularyWordRecognition', 'BasicMotions', 'Epilepsy', 'ERing', 'Libras', 'NATOPS', 'RacketSports']
-DATASETS_TEST = ['BasicMotions']
+DATASETS_TEST = ['RacketSports']
 
 #Fixed values for experiments
 FIXED_ALPHA = 0.51

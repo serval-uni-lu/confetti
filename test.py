@@ -1,3 +1,5 @@
+import pandas as pd
+
 import config as cfg
 import numpy as np
 import keras
@@ -37,17 +39,24 @@ if __name__ == "__main__":
 
     weights = np.load(f"/Users/alan.paredes/Desktop/confetti/models/trained_models/{dataset}/{dataset}_training_weights.npy")
 
+
+
     ce = CONFETTI(model_path, X_train, X_samples, y_samples, y_train, weights)
-    naive, optimized = ce.parallelized_counterfactual_generator(save_counterfactuals=False, processes=5, theta=0.51)
+    thetas = [0.65, 0.75,0.85, 0.95]
+    summaries = pd.DataFrame(columns=['Theta', 'Dataset', 'Coverage', 'Sparsity', 'Confidence', 'Validity', 'Proximity'])
+    for theta in thetas:
+        naive, optimized = ce.parallelized_counterfactual_generator(save_counterfactuals=False, processes=5, theta=theta)
 
-    ev = Evaluator()
+        ev = Evaluator()
 
-    metrics, summary = ev.evaluate_results(model,
-                                           dataset=dataset,
-                                           counterfactuals=naive,
-                                           sample=X_samples,
-                                           og_labels=y_samples,
-                                           timesteps=input_shape[0],
-                                           channels=input_shape[1])
+        metrics, summary = ev.evaluate_results(model,
+                                               dataset=dataset,
+                                               counterfactuals=optimized,
+                                               sample=X_samples,
+                                               og_labels=y_samples,
+                                               timesteps=input_shape[0],
+                                               channels=input_shape[1])
+        summary['Theta'] = theta
+        summaries = pd.concat([summaries, summary], ignore_index=True)
 
-    summary.to_csv("summary.csv", index=False)
+    summaries.to_csv("summary.csv", index=False)

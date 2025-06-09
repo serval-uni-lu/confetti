@@ -12,9 +12,9 @@ import config as cfg
 tf.keras.utils.disable_interactive_logging()
 
 
-def run_sets_counterfactuals():
-    datasets = ["AtrialFibrillation"]
-    times_file = cfg.RESULTS_DIR / 'execution_time_sets_resnet.csv'
+def run_sets_counterfactuals(model_name=None):
+    datasets = cfg.DATASETS_TEST
+    times_file = cfg.RESULTS_DIR / f'execution_time_sets_{model_name}.csv'
     results_directory = cfg.RESULTS_DIR
     results_directory.mkdir(parents=True, exist_ok=True)
 
@@ -26,7 +26,7 @@ def run_sets_counterfactuals():
         # Sets needs one-hot encoding to be False because it does the One-Hot encoding internally
         X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
 
-        model_path = cfg.TRAINED_MODELS_DIR / dataset / f'{dataset}_resnet.keras'
+        model_path = cfg.TRAINED_MODELS_DIR / dataset / f'{dataset}_{model_name}.keras'
         model = keras.models.load_model(model_path)
 
         sample_file = f"{cfg.DATA_DIR}/{dataset}_samples.csv"
@@ -35,13 +35,15 @@ def run_sets_counterfactuals():
 
         # Determine time series length (assuming shape is [n_samples, n_channels, series_length])
         series_length = X_train.shape[2]
-        max_shapelet_len = series_length // 2
+        min_shapelet_len = max(3, series_length // 10)
+        max_shapelet_len = max(min_shapelet_len + 1, series_length // 2)
 
+        print(f"series_length: {series_length}, min_shapelet_len: {min_shapelet_len}, max_shapelet_len: {max_shapelet_len}")
         exp_model = SETSCF(model,
                            (X_train, y_train),
                            backend='TF',
                            mode='time',
-                           min_shapelet_len=6,
+                           min_shapelet_len=min_shapelet_len,
                            max_shapelet_len=max_shapelet_len,
                            time_contract_in_mins_per_dim=0.5,
                            fit_shapelets=False)
@@ -57,10 +59,13 @@ def run_sets_counterfactuals():
 
             try:
                 cf_explanation, label_cf = exp_model.explain(item, target=None)
+                if cf_explanation is None:
+                    print(f"CF explanation is None for instance {i}. Skipping.")
+                    continue
             except AssertionError as e:
                 if "Pertubed instance is identical to the original instance" in str(e):
                     print(f"No CF found for instance {i}. Appending None.")
-                    cf_explanation, label_cf = None, None
+                    continue
                 else:
                     raise  # Re-raise if it's a different assertion error
 
@@ -80,7 +85,7 @@ def run_sets_counterfactuals():
         results_sets["Solution"] = results_sets["Solution"].apply(array_to_string)
         dataset_result_dir = cfg.RESULTS_DIR / dataset
         dataset_result_dir.mkdir(parents=True, exist_ok=True)
-        results_sets.to_csv(dataset_result_dir / f'sets_{dataset}_resnet_counterfactuals.csv', index=False)
+        results_sets.to_csv(dataset_result_dir / f'sets_{dataset}_{model_name}_counterfactuals.csv', index=False)
         print(f"Results for {dataset} saved to CSV.")
 
         # Append execution time to the shared CSV
@@ -90,7 +95,7 @@ def run_sets_counterfactuals():
 
 
 def main():
-    run_sets_counterfactuals()
+    run_sets_counterfactuals(model_name='resnet')
 
 if __name__ == "__main__":
     main()

@@ -26,8 +26,10 @@ class Evaluator:
             explainer (str): The name of the explainer.
             dataset (str): The name of the dataset to evaluate.
             model_name (str): The name of the model that was used. Either 'fcn' or 'resnet'.
-            alpha (bool): Only applies when explainer = 'confetti'. If True, loads alpha solutions, otherwise loads theta solutions.
-            param_config (float): Only applies when explainer = 'confetti'. The parameter configuration used for the explainer.
+            alpha (bool): Only applies when explainer = 'confetti'. If True, loads alpha solutions, otherwise loads
+            theta solutions.
+            param_config (float): Only applies when explainer = 'confetti'. The parameter configuration used for the
+            explainer.
 
         Returns:
             tuple: A tuple containing:
@@ -35,7 +37,7 @@ class Evaluator:
                 - DataFrame summarizing the overall evaluation results.
         """
         # Load Data
-        X_sample, y_sample = load_multivariate_ts_from_csv(dataset)
+        X_sample, y_sample = load_multivariate_ts_from_csv(f'../data/{dataset}_samples.csv')
         timesteps = X_sample.shape[1]  # Number of time steps per instance
         channels = X_sample.shape[2]  # Number of channels per instance
 
@@ -56,14 +58,18 @@ class Evaluator:
                                                          timesteps=timesteps,
                                                          channels=channels)
 
-        dataset_summary = self.__get_dataset_summary(dataset=dataset,
+        dataset_summary = self.__get_dataset_summary(explainer=explainer,
+                                                    dataset=dataset,
                                                      sample=X_sample,
                                                      counterfactuals=counterfactuals,
-                                                     metrics=counterfactuals_metrics)
+                                                     metrics=counterfactuals_metrics,
+                                                     alpha=alpha,
+                                                     param_config=param_config)
 
         return counterfactuals_metrics, dataset_summary
 
-    def evaluate_results(self, model, dataset: str, counterfactuals:pd.DataFrame, sample: np.array, og_labels: np.array, timesteps: int, channels: int):
+    def evaluate_results(self, model, dataset: str, counterfactuals:pd.DataFrame, sample: np.array, og_labels: np.array,
+                         timesteps: int, channels: int):
         """
         Evaluates the counterfactuals using the provided test data.
 
@@ -109,7 +115,8 @@ class Evaluator:
 
         return X_samples, y_samples
 
-    def __compute_metrics(self, model, counterfactuals: pd.DataFrame, sample: np.array, og_labels: np.array, timesteps, channels):
+    def __compute_metrics(self, model, counterfactuals: pd.DataFrame, sample: np.array, og_labels: np.array, timesteps,
+                          channels):
         """
         Computes the evaluation metrics for a given counterfactual instance.
 
@@ -127,7 +134,9 @@ class Evaluator:
             'Sparsity': pd.Series(dtype='float'),
             'Confidence': pd.Series(dtype='float'),
             'Validity': pd.Series(dtype='int'),
-            'Proximity': pd.Series(dtype='float')
+            'Proximity L1': pd.Series(dtype='float'),
+            'Proximity L2': pd.Series(dtype='float'),
+            'Proximity MAD': pd.Series(dtype='float')
         })
 
         for i in range(len(sample)):
@@ -148,11 +157,16 @@ class Evaluator:
                     #Compute Validity
                     validity = self.__get_validity(model, ce, timesteps, channels, original_label)
 
-                    # Compute Proximity (L1 distance to original instance)
-                    proximity = self.__l1_distance_mad(instance, ce)
+                    # Compute Proximity (L1 MAD to original instance)
+                    proximity_MAD = self.__l1_distance_mad(instance, ce)
+                    #Compute Proximity (L1 distance to original instance)
+                    proximity_l1 = self.__l1_distance(instance, ce)
+                    # Compute Proximity (L2 distance to original instance)
+                    proximity_l2 = self.__l2_distance(instance, ce)
+
                     # Store results
                     row_results_dict = {'Sparsity': sparsity, 'Confidence': confidence, 'Validity': validity,
-                                        'Proximity': proximity}
+                                        'Proximity L1': proximity_l1, 'Proximity L2': proximity_l2, 'Proximity MAD': proximity_MAD}
                     row_results_df = pd.DataFrame([row_results_dict])
                     metrics = pd.concat([metrics, row_results_df], ignore_index=True)
 
@@ -197,28 +211,53 @@ class Evaluator:
         else:
             return pd.read_csv(cfg.RESULTS_DIR / dataset / f'{explainer}_{dataset}_{model}_counterfactuals.csv')
 
-    def __get_dataset_summary(self, dataset: str, sample: np.array, counterfactuals:pd.DataFrame, metrics: pd.DataFrame):
+    def __get_dataset_summary(self, explainer:str, dataset: str, sample: np.array, counterfactuals:pd.DataFrame,
+                              metrics: pd.DataFrame, alpha: bool = True, param_config: float = 0.0):
         """
         Summarizes the evaluation metrics for a dataset by computing the mean values.
 
         Args:
+            param explainer (str): The name of the explainer.
             param: dataset (str): The dataset name.
             param: sample (numpy.ndarray): The sample set containing the original instances.
             param: counterfactuals (pd.DataFrame): The counterfactuals to evaluate.
             param: metrics (DataFrame): The computed metrics for each counterfactual.
+            param: alpha (bool): Only applies when explainer = 'confetti'. Only used to inform what was the parameter
+            used to generate the counterfactuals.
+            param: param_config (float): Only applies when explainer = 'confetti'. The parameter configuration used for
+            the explainer.
 
         Returns:
             DataFrame: A DataFrame summarizing the evaluation results.
         """
         coverage = self.__get_coverage(sample=sample, counterfactuals=counterfactuals)
-        summary = {
-            'Dataset': dataset,
-            'Coverage': coverage,
-            'Sparsity': metrics['Sparsity'].mean(),
-            'Confidence': metrics['Confidence'].mean(),
-            'Validity': metrics['Validity'].mean(),
-            'Proximity': metrics['Proximity'].mean()
-        }
+        if explainer not in ['confetti_naive', 'confetti_optimized']:
+            summary = {
+                'Explainer': explainer,
+                'Dataset': dataset,
+                'Coverage': coverage,
+                'Sparsity': metrics['Sparsity'].mean(),
+                'Confidence': metrics['Confidence'].mean(),
+                'Validity': metrics['Validity'].mean(),
+                'Proximity L1': metrics['Proximity L1'].mean(),
+                'Proximity L2': metrics['Proximity L2'].mean(),
+                'Proximity MAD': metrics['Proximity MAD'].mean()
+            }
+        else:
+            summary = {
+                'Explainer': explainer,
+                'Alpha': alpha,
+                'Param Config': param_config,
+                'Dataset': dataset,
+                'Coverage': coverage,
+                'Sparsity': metrics['Sparsity'].mean(),
+                'Confidence': metrics['Confidence'].mean(),
+                'Validity': metrics['Validity'].mean(),
+                'Proximity L1': metrics['Proximity L1'].mean(),
+                'Proximity L2': metrics['Proximity L2'].mean(),
+                'Proximity MAD': metrics['Proximity MAD'].mean()
+            }
+
         return pd.DataFrame([summary])
 
     def __get_coverage(self, sample: np.array, counterfactuals: pd.DataFrame) -> float:
@@ -261,6 +300,34 @@ class Evaluator:
     def __get_validity(self, model, counterfactual, timesteps, channels, original_label):
         ce_label = np.argmax(model.predict(counterfactual.reshape(1, timesteps, channels)))
         return 0 if original_label == ce_label else 1
+
+    def __l1_distance(self, ts1:np.array, ts2:np.array):
+        """
+        Compute the Manhattan (L1) distance between two multivariate time series.
+
+        Parameters:
+        ts1, ts2 (2D numpy arrays): Time series of shape (T, D)
+
+        Returns:
+        float: Manhattan distance.
+        """
+        if ts1.shape != ts2.shape:
+            raise ValueError("Time series must have the same shape (Timesteps, Dimensions).")
+        return np.sum(np.abs(ts1 - ts2))
+
+    def __l2_distance(self, ts1:np.array, ts2:np.array):
+        """
+        Compute the Euclidean (L2) distance between two multivariate time series.
+
+        Parameters:
+        ts1, ts2 (2D numpy arrays): Time series of shape (T, D)
+
+        Returns:
+        float: Euclidean distance.
+        """
+        if ts1.shape != ts2.shape:
+            raise ValueError("Time series must have the same shape (Timesteps, Dimensions).")
+        return np.sqrt(np.sum((ts1 - ts2) ** 2))
 
     def __mad_normalization(self, ts):
         """

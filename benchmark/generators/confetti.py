@@ -14,7 +14,7 @@ import json
 tf.keras.utils.disable_interactive_logging()
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-if __name__ == "__main__":
+def run_confetti_counterfactuals(model_name=None):
     # — load or initialize checkpoint.json —
     cp_path = cfg.RESULTS_DIR / "checkpoint.json"
     if cp_path.exists():
@@ -26,7 +26,7 @@ if __name__ == "__main__":
         with open(cp_path, "w") as f:
             json.dump(checkpoint, f, indent=2)
 
-    time_file = cfg.RESULTS_DIR / "execution_times_confetti_resnet.csv"
+    time_file = cfg.RESULTS_DIR / f"execution_times_confetti_{model_name}.csv"
     if not time_file.exists():
         pd.DataFrame(columns=['Dataset', 'Alpha', 'Theta', 'Execution Time']) \
             .to_csv(time_file, index=False)
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     for dataset, params in checkpoint.items():
         ce_dir = cfg.RESULTS_DIR / dataset
         ce_dir.mkdir(parents=True, exist_ok=True)
-        model_path = str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_resnet.keras")
+        model_path = str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras")
 
         # load data, model, explainer
         X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
@@ -69,8 +69,8 @@ if __name__ == "__main__":
             ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
 
             # save CFs + timing
-            ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_resnet_alpha_{alpha}.csv", index=False)
-            ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_resnet_alpha_{alpha}.csv", index=False)
+            ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_{model_name}_alpha_{alpha}.csv", index=False)
+            ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_{model_name}_alpha_{alpha}.csv", index=False)
             # save execution time
             pd.DataFrame([{
                 'Dataset': dataset,
@@ -104,8 +104,8 @@ if __name__ == "__main__":
             ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
 
             # save CFs + timing
-            ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_resnet_theta_{theta}.csv", index=False)
-            ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_resnet_theta_{theta}.csv", index=False)
+            ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_{model_name}_theta_{theta}.csv", index=False)
+            ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_{model_name}_theta_{theta}.csv", index=False)
             pd.DataFrame([{
                 'Dataset': dataset,
                 'Alpha': cfg.FIXED_ALPHA,
@@ -117,3 +117,9 @@ if __name__ == "__main__":
             params['thetas'].pop(0)
             with open(cp_path, "w") as f:
                 json.dump(checkpoint, f, indent=2)
+
+def main():
+    run_confetti_counterfactuals(model_name='fcn')
+
+if __name__ == "__main__":
+    main()
