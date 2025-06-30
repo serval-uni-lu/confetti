@@ -8,7 +8,6 @@ from pathlib import Path
 from TSInterpret.InterpretabilityModels.counterfactual.TSEvoCF import TSEvo
 from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv, array_to_string
 import config as cfg
-from keras.utils import to_categorical
 
 tf.keras.utils.disable_interactive_logging()
 
@@ -18,26 +17,19 @@ def run_tsevo_counterfactuals(model_name=None):
     times = {}
 
     for dataset in tqdm(datasets, desc='Processing datasets'):
-        X_train, X_test, y_train, y_test = load_data(dataset, one_hot=True)
-
         model_path = cfg.TRAINED_MODELS_DIR / dataset / f'{dataset}_{model_name}.keras'
         model = keras.models.load_model(str(model_path))
 
-        sample_file = f"{cfg.DATA_DIR}/{dataset}_samples.csv"
-        X_samples, y_samples_raw = load_multivariate_ts_from_csv(sample_file)
+        X_train, X_test, y_train, y_test = load_data(dataset, one_hot=True)
+        reference_labels = np.argmax(model.predict(X_train), axis=1)
+
+        sample_file = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
+        X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
         print(f"Loaded {dataset} samples from CSV: {X_samples.shape}")
 
-        # Infer num_classes from y_train (one-hot encoded) or y_train.max() + 1
-        if len(y_train.shape) > 1:
-            num_classes = y_train.shape[1]
-        else:
-            num_classes = len(np.unique(y_train))
-
-        # One-hot for potential later usage
-        y_samples_onehot = to_categorical(y_samples_raw, num_classes=num_classes)
 
         exp_model = TSEvo(model=model,
-                          data=(X_test, y_test),
+                          data=(X_train, reference_labels),
                           backend='TF',
                           mode='time',
                           epochs=100,
@@ -49,7 +41,7 @@ def run_tsevo_counterfactuals(model_name=None):
         start_time = time.time()
         for i, instance in enumerate(tqdm(X_samples, desc=f"Generating CEs for {dataset}")):
             item = instance.reshape(1, *instance.shape)
-            label = np.array([y_samples_raw[i]])  # <-- Pass as class index
+            label = np.array([y_samples[i]])  # <-- Pass as class index
 
             cf_solution, label_cf = exp_model.explain(item, label)
 

@@ -20,15 +20,16 @@ NUMBER_OF_SAMPLES_PER_CLASS = {
 }
 
 #Datasets to Test
-DATASETS = ['ArticularyWordRecognition', 'BasicMotions', 'Epilepsy', 'ERing', 'Libras', 'NATOPS', 'RacketSports']
+DATASETS = ['ArticularyWordRecognition', 'BasicMotions', 'Epilepsy', 'ERing', 'Libras', 'RacketSports', 'NATOPS']
+DATASETS_SETS = ['ArticularyWordRecognition', 'BasicMotions', 'Epilepsy', 'ERing', 'Libras', 'RacketSports']
 DATASETS_TEST = ['RacketSports']
 
 #Fixed values for experiments
-FIXED_ALPHA = 0.51
-FIXED_THETA = 0.5
+FIXED_ALPHA = 0.50
+FIXED_THETA = 0.51
 
 # default hyperparameter grids
-_DEFAULT_ALPHAS = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
+_DEFAULT_ALPHAS = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
 _DEFAULT_THETAS = [0.55, 0.65, 0.75, 0.85, 0.95]
 
 # checkpoint dict for “breaks” logic

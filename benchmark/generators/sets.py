@@ -13,7 +13,7 @@ tf.keras.utils.disable_interactive_logging()
 
 
 def run_sets_counterfactuals(model_name=None):
-    datasets = cfg.DATASETS_TEST
+    datasets = ['NATOPS']
     times_file = cfg.RESULTS_DIR / f'execution_time_sets_{model_name}.csv'
     results_directory = cfg.RESULTS_DIR
     results_directory.mkdir(parents=True, exist_ok=True)
@@ -23,13 +23,15 @@ def run_sets_counterfactuals(model_name=None):
         pd.DataFrame(columns=['Dataset', 'Execution Time (seconds)']).to_csv(times_file, index=False)
 
     for dataset in tqdm(datasets, desc='Processing datasets'):
-        # Sets needs one-hot encoding to be False because it does the One-Hot encoding internally
-        X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
-
+        #load the model
         model_path = cfg.TRAINED_MODELS_DIR / dataset / f'{dataset}_{model_name}.keras'
         model = keras.models.load_model(model_path)
 
-        sample_file = f"{cfg.DATA_DIR}/{dataset}_samples.csv"
+        # Sets needs one-hot encoding to be False because it does the One-Hot encoding internally
+        X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
+        reference_labels = np.argmax(model.predict(X_train), axis=1)
+
+        sample_file = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
         X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
         print(f"Loaded {dataset} samples from CSV: {X_samples.shape}")
 
@@ -40,7 +42,7 @@ def run_sets_counterfactuals(model_name=None):
 
         print(f"series_length: {series_length}, min_shapelet_len: {min_shapelet_len}, max_shapelet_len: {max_shapelet_len}")
         exp_model = SETSCF(model,
-                           (X_train, y_train),
+                           (X_train, reference_labels),
                            backend='TF',
                            mode='time',
                            min_shapelet_len=min_shapelet_len,

@@ -292,7 +292,6 @@ def plot_with_cam(ce, instance: int, optimized=False, precision=True, weights=No
 
     return pd.DataFrame(data_dict)
 
-
 def tradeoff_sparsity_proximity(df):
     """
     Plots each row from the dataframe in a space where X is df['Proximity'] and Y is df['Sparsity'].

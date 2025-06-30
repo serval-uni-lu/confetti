@@ -21,26 +21,28 @@ import tensorflow as tf
 tf.keras.utils.disable_interactive_logging()
 
 
+
 class CONFETTI:
-    def __init__(self, model_path, X_train, X_test, y_test, y_train, weights):
+    def __init__(self, model_path=None, X_test=None, reference_data=None, weights=None, n_partitions=12):
         """
         Initialize the CONFETTI explainer with the model and data.
         Args:
             model_path: Path to the trained model
-            X_train: Data that was used to train the model.
             X_test: Instances to be explained
-            y_test: Labels of the instances to be explained
-            y_train: Labels of the training data.
+            reference_data:
             weights: Model weights for the training data.
+            n_partitions: Number of partitions for the reference directions in NSGA-III. Defaults to 12.
         """
+        if model_path is None or X_test is None or reference_data is None or weights is None:
+            raise ValueError("Model, X_test, reference_data, and weights must be provided.")
+
         self.model_path = model_path
         self.model = keras.models.load_model(model_path)
-        self.X_train = X_train
         self.X_test = X_test
-        self.y_test = y_test
-        self.y_train = y_train
         self.y_pred = np.argmax(self.model.predict(self.X_test, verbose=0), axis=1)
-        self.y_pred_train = np.argmax(self.model.predict(self.X_train, verbose=0), axis=1)
+        self.reference_data = reference_data
+        self.reference_labels = np.argmax(self.model.predict(self.reference_data, verbose=0), axis=1)
+        self.n_partitions = n_partitions
         self.weights = weights
         self.nuns = []
 
@@ -76,13 +78,13 @@ class CONFETTI:
             theta: minimum prediction probability for the neighbor's class
         """
         # Label DataFrame
-        df = pd.DataFrame(self.y_train, columns=['label'])
+        df = pd.DataFrame(self.reference_labels, columns=['label'])
         df.index.name = 'index'
 
         # Only keep unlike-labels
         unlike_mask = df['label'] != predicted_label
         unlike_indices = df[unlike_mask].index
-        X_unlike = self.X_train[list(unlike_indices)]
+        X_unlike = self.reference_data[list(unlike_indices)]
 
         # Fit KNN on unlike instances
         knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance)
@@ -91,7 +93,7 @@ class CONFETTI:
         # Get nearest neighbors
         dist, ind = knn.kneighbors(query.reshape(1, query.shape[0], query.shape[1]), return_distance=True)
         actual_indices = unlike_indices[ind[0]]
-        candidate_X = self.X_train[actual_indices]
+        candidate_X = self.reference_data[actual_indices]
 
         # Use model.predict to get class probabilities
         prob_array = self.model.predict(candidate_X)  # shape: [n_candidates, n_classes]
@@ -110,25 +112,28 @@ class CONFETTI:
 
         return final_distances, final_indices
 
-    def naive_approach(self, instance, nun, model, subarray_length=1, theta=0.51):
+    def naive_approach(self, instance, nun, model, subarray_length=1, theta=0.51, verbose=False):
         """
         Swap the original instance's values for those of the nearest unlike neighbour (nun). Naive Approach.
 
         Args:
             instance: the index of the original instance in the Test dataset
             nun: the index of the nearest unlike neighbour in the Train dataset
+            model: the trained model
             subarray_length = The length of the sub-sequence that will be modified
+            theta = the minimum probability threshold for the target class. Defaults to 0.51
+            verbose: if True, prints additional information during execution
         """
         # Initialize values
 
         starting_point = self.findSubarray(self.weights[nun], subarray_length)
 
         counterfactual = np.concatenate((self.X_test[instance][:starting_point],
-                                         (self.X_train[nun][starting_point:subarray_length + starting_point]),
+                                         (self.reference_data[nun][starting_point:subarray_length + starting_point]),
                                          self.X_test[instance][subarray_length + starting_point:]))
 
         prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]), verbose=0)[0][
-            self.y_pred_train[nun]]
+            self.reference_labels[nun]]
 
         while prob_target <= theta:
             subarray_length += 1
@@ -137,26 +142,30 @@ class CONFETTI:
 
             # Create the counterfactual by swapping the original instance's values for the NUN's.
             counterfactual = np.concatenate((self.X_test[instance][:starting_point],
-                                             (self.X_train[nun][starting_point:subarray_length + starting_point]),
+                                             (self.reference_data[nun][starting_point:subarray_length + starting_point]),
                                              self.X_test[instance][subarray_length + starting_point:]))
 
             # Feed new instance to model and check if the probability target changed.
-            prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]),verbose=0)[0][
-                self.y_pred_train[nun]]
-        print(f'Probability target is {theta} and the CE is {prob_target}')
+            counterfactual_reshaped = counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1])
+
+            prob_target = model.predict(counterfactual_reshaped,verbose=0)[0][self.reference_labels[nun]]
+
+        ce_label = np.argmax(model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]), verbose=0), axis=1)
+
+
         counterfactual_dict = {'Solution': [counterfactual], 'Window': subarray_length,
-                               'Test Instance': instance, 'NUN Instance': nun}
+                               'Test Instance': instance, 'NUN Instance': nun, 'CE Label': ce_label[0],}
         counterfactual_df = pd.DataFrame(counterfactual_dict)
         return counterfactual_df
 
     def optimization(self, instance_index: int, nun_index: int, subsequence_length: int, model, alpha=0.5,
-                     theta=0.51):
+                     theta=0.51, verbose=False):
         # Initialize Values
         query = self.X_test[instance_index]
 
-        nun = copy.deepcopy(self.X_train[nun_index])
+        nun = copy.deepcopy(self.reference_data[nun_index])
         solutions = pd.DataFrame(
-            columns=["Solution", "Window", "Test Instance", "NUN Instance"])
+            columns=["Solution", "Window", "Test Instance", "NUN Instance", 'CE Label'])
 
         # Start Optimization Search
         high = subsequence_length
@@ -164,17 +173,18 @@ class CONFETTI:
         while low <= high:
             start_time = time.time()
             window = (low + high) // 2
-            print(f"Optimization of CE for Instance {instance_index} in Window {window}")
+            if verbose:
+                print(f"Optimization of CE for Instance {instance_index} in Window {window}")
             # Timestep where it starts
             starting_point = self.findSubarray((self.weights[nun_index]), window)
             end_point = starting_point + window
 
             # Define the Counterfactual Problem
             problem = CounterfactualProblem(query, nun, nun_index, starting_point, window, model,
-                                            self.y_pred_train, alpha, theta)
+                                            self.reference_labels, alpha, theta)
 
             # create the reference directions to be used for the optimization in NSGA3
-            ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=12)
+            ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=self.n_partitions)
 
             # NGSA-III Algorithm
             algorithm = NSGA3(pop_size=100,
@@ -184,7 +194,7 @@ class CONFETTI:
                               mutation=BitflipMutation(),
                               )
 
-            # Only do 300 generations
+            # Only do 100 generations
             termination = get_termination("n_gen", 100)
 
             # Run Optimization
@@ -201,19 +211,20 @@ class CONFETTI:
 
                     op_counterfactual_reshaped = op_counterfactual.reshape(1, op_counterfactual.shape[0],
                                                                            op_counterfactual.shape[1])
-
+                    ce_label = np.argmax(model.predict(op_counterfactual_reshaped, verbose=False), axis=1)
                     row_dict = {'Solution': [op_counterfactual], 'Window': window, 'Test Instance': instance_index,
-                                'NUN Instance': nun_index}
+                                'NUN Instance': nun_index, 'CE Label': ce_label[0]}
                     row_df = pd.DataFrame(row_dict)
                     solutions = pd.concat([solutions, row_df], ignore_index=True)
 
                 high = window - 1
             final_time = time.time() - start_time
-            print(f'Instance: {instance_index} | Window: {window} | Time: {final_time}')
+            if verbose:
+                print(f'Instance: {instance_index} | Window: {window} | Time: {final_time}')
 
         return solutions
 
-    def one_pass(self, test_instance, alpha=0.5, theta=0.51):
+    def one_pass(self, test_instance, alpha=0.5, theta=0.51, verbose=False):
         # Load model
         model = keras.models.load_model(self.model_path)
         # Find the Nearest Unlike Neighbour
@@ -223,33 +234,39 @@ class CONFETTI:
                                             n_neighbors=1,
                                             theta=theta)
         if nun_result[0] is None:
-            print(f'No NUN found for instance {test_instance} with this theta.')
+            if verbose:
+                print(f'No NUN found for instance {test_instance} with theta {theta}.')
             return None, None, None
         else:
             nun = nun_result[1][0]
 
         # Naive Approach
-        print(f'Naive approach started for instance {test_instance}')
+        if verbose:
+            print(f'Naive approach started for instance {test_instance}')
         naive = self.naive_approach(instance=test_instance,
                                     nun=nun,
                                     model=model,
-                                    theta=theta)
-        print(f'Naive approach finished for instance {test_instance}')
+                                    theta=theta,
+                                    verbose=verbose)
+        if verbose:
+            print(f'Naive approach finished for instance {test_instance}')
+
+            print(f'Optimization stage started for instance {test_instance}')
         # Optimization
-        print(f'Optimization stage started for instance {test_instance}')
         optimized = self.optimization(test_instance, nun, model=model, subsequence_length=naive.iloc[0]["Window"],
-                                      alpha=alpha, theta=theta)
-        print(f'Optimization stage finished for instance {test_instance}')
+                                      alpha=alpha, theta=theta, verbose=verbose)
+        if verbose:
+            print(f'Optimization stage finished for instance {test_instance}')
 
         return nun, naive, optimized
 
     def parallelized_counterfactual_generator(self, output_directory=None, save_counterfactuals=True, processes=8,
-                                              alpha=0.5, theta=0.51):
+                                              alpha=0.5, theta=0.51, verbose=False):
         self.naive_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
         self.optimized_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
 
         pool = Pool(processes=processes)
-        wrapped_one_pass = partial(self.one_pass, alpha=alpha, theta=theta)
+        wrapped_one_pass = partial(self.one_pass, alpha=alpha, theta=theta, verbose=verbose)
         res = pool.map(wrapped_one_pass, range(len(self.X_test)))
         pool.close()
         pool.join()
@@ -495,9 +512,9 @@ class CONFETTI:
     def load_optimized_solutions(self, directory: str):
         self.optimized_counterfactuals = pd.read_csv(directory)
         self.optimized_counterfactuals["Solution"] = self.optimized_counterfactuals["Solution"].apply(
-            lambda x: convert_string_to_array(x, timesteps=self.X_train.shape[1], channels=self.X_train.shape[2]))
+            lambda x: convert_string_to_array(x, timesteps=self.X_test.shape[1], channels=self.X_test.shape[2]))
 
     def load_naive_solutions(self, directory: str):
         self.naive_counterfactuals = pd.read_csv(directory)
         self.naive_counterfactuals["Solution"] = self.naive_counterfactuals["Solution"].apply(
-            lambda x: convert_string_to_array(x, timesteps=self.X_train.shape[1], channels=self.X_train.shape[2]))
+            lambda x: convert_string_to_array(x, timesteps=self.X_test.shape[1], channels=self.X_test.shape[2]))

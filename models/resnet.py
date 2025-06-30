@@ -5,13 +5,7 @@ import keras
 import tensorflow as tf
 import numpy as np
 import time
-
-import matplotlib
-#from utils.utils import save_test_duration
-
-matplotlib.use('agg')
-import matplotlib.pyplot as plt
-
+from pathlib import Path
 from models.utils import save_logs, calculate_metrics
 
 
@@ -19,11 +13,12 @@ from models.utils import save_logs, calculate_metrics
 class ClassifierRESNET:
 
     def __init__(self, output_directory, input_shape, nb_classes, dataset_name:str, verbose=False, build=True):
-        self.output_directory = output_directory
+        self.output_directory = Path(output_directory)
+        self.output_directory.mkdir(parents=True, exist_ok=True)  # ensure it exists
         self.dataset_name = dataset_name
         if build:
             self.model = self.build_model(input_shape, nb_classes)
-            if (verbose == True):
+            if verbose:
                 self.model.summary()
             self.verbose = verbose
 
@@ -104,7 +99,7 @@ class ClassifierRESNET:
 
         reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=50, min_lr=0.0001)
 
-        file_path = self.output_directory + f"{self.dataset_name}_resnet.keras"
+        file_path = self.output_directory / f"{self.dataset_name}_resnet.keras"
 
         model_checkpoint = keras.callbacks.ModelCheckpoint(filepath=file_path, monitor='loss',
                                                            save_best_only=True)
@@ -123,14 +118,17 @@ class ClassifierRESNET:
 
         mini_batch_size = int(min(x_train.shape[0] / 10, batch_size))
 
+        print('Training with mini_batch_size:', mini_batch_size)
         start_time = time.time()
 
         hist = self.model.fit(x_train, y_train, batch_size=mini_batch_size, epochs=nb_epochs,
                               verbose=self.verbose, validation_data=(x_val, y_val), callbacks=self.callbacks)
 
-        duration = time.time() - start_time
 
-        self.model.save(self.output_directory + f"{self.dataset_name}_last_model_resnet.keras")
+        duration = time.time() - start_time
+        print('Training took {} seconds.'.format(duration))
+
+        self.model.save(self.output_directory / f"{self.dataset_name}_last_model_resnet.keras")
 
         y_pred = self.predict(x_val, y_true,
                               return_df_metrics=False)
@@ -146,7 +144,7 @@ class ClassifierRESNET:
 
     def predict(self, x_test, y_true, return_df_metrics=True):
         start_time = time.time()
-        model_path = self.output_directory + f"{self.dataset_name}_resnet.keras"
+        model_path = self.output_directory / f"{self.dataset_name}_resnet.keras"
         model = keras.models.load_model(model_path)
         y_pred = model.predict(x_test)
         if return_df_metrics:

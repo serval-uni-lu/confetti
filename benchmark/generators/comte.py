@@ -24,15 +24,19 @@ def run_comte_counterfactuals(model_name=None):
     for dataset in tqdm(datasets, desc='Processing datasets'):
         X_train, X_test, y_train, y_test = load_data(dataset, one_hot=True)
 
+
         model_path = cfg.TRAINED_MODELS_DIR / dataset / f'{dataset}_{model_name}.keras'
         model = keras.models.load_model(str(model_path))
 
-        sample_file = f"{cfg.DATA_DIR}/{dataset}_samples.csv"
+        #Reference labels are the predicted labels for the training set. NOT the ground truth labels.
+        reference_labels = np.argmax(model.predict(X_train), axis=1)
+
+        sample_file = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
         X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
         print(f"Loaded {dataset} samples from CSV: {X_samples.shape}")
 
         exp_model = COMTECF(model=model,
-                            data=(X_train, y_train),
+                            data=(X_train, reference_labels),
                             mode='time',
                             backend='TF',
                             method='opt',

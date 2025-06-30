@@ -9,7 +9,7 @@ if __name__ == "__main__":
     output_dir = os.path.join(os.path.dirname(__file__))
 
     for dataset in cfg.DATASETS:
-        file_path = os.path.join(output_dir, f"{dataset}_samples.csv")
+        file_path = os.path.join(output_dir, f"{dataset}_resnet_samples.csv")
 
         if not os.path.exists(file_path):
             print(f"Error: {file_path} not found! Run `generate_samples.py` first.")

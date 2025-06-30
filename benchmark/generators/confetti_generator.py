@@ -10,6 +10,7 @@ import pandas as pd
 from tqdm import tqdm
 import time
 import json
+import numpy as np
 
 tf.keras.utils.disable_interactive_logging()
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -40,14 +41,19 @@ def run_confetti_counterfactuals(model_name=None):
         X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
         model = keras.models.load_model(model_path)
 
-        # load samples
-        sample_file = f"{cfg.DATA_DIR}/{dataset}_samples.csv"
+
+        # load samples of the specific model
+        sample_file = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
         X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
         training_weights = cam.compute_weights_cam(model=model, X_data=X_train, dataset=dataset,
                                                    save_weights=True, data_type='training')
 
         #Create Explainer
-        ce = CONFETTI(model_path, X_train, X_samples, y_samples, y_train, training_weights)
+        ce = CONFETTI(model_path=model_path,
+                      X_test=X_samples,
+                      reference_data=X_train,
+                      weights=training_weights,
+                      n_partitions=2)
 
         # — Experiment 1: Alphas —
         alphas = params.get('alphas', [])
@@ -58,9 +64,10 @@ def run_confetti_counterfactuals(model_name=None):
             ces_naive, ces_optimized = ce.parallelized_counterfactual_generator(
                 ce_dir,
                 save_counterfactuals=False,
-                processes=6,
+                processes=8,
                 alpha=alpha,
-                theta=cfg.FIXED_THETA
+                theta=cfg.FIXED_THETA,
+                verbose=True
             )
             elapsed = time.time() - start
 
@@ -93,9 +100,10 @@ def run_confetti_counterfactuals(model_name=None):
             ces_naive, ces_optimized  = ce.parallelized_counterfactual_generator(
                 ce_dir,
                 save_counterfactuals=False,
-                processes=6,
+                processes=8,
                 alpha=cfg.FIXED_ALPHA,
-                theta=theta
+                theta=theta,
+                verbose=True
             )
             elapsed = time.time() - start
 

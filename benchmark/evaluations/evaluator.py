@@ -1,6 +1,8 @@
+from typing import Sequence, Iterable
 import pandas as pd
 import numpy as np
-from numpy.f2py.crackfortran import param_parse
+from tslearn.metrics import dtw
+from tslearn.neighbors import KNeighborsTimeSeries
 
 from confetti.explainer.utils import load_data, convert_string_to_array, load_multivariate_ts_from_csv
 import keras
@@ -39,7 +41,8 @@ class Evaluator:
                 - DataFrame summarizing the overall evaluation results.
         """
         # Load Data
-        X_sample, y_sample = load_multivariate_ts_from_csv(f'../data/{dataset}_samples.csv')
+        X_train, X_test, y_train, y_test = load_data(dataset, one_hot=True) # We only need the training data
+        X_sample, y_sample = load_multivariate_ts_from_csv(f'{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv') #Instances that were explained
         timesteps = X_sample.shape[1]  # Number of time steps per instance
         channels = X_sample.shape[2]  # Number of channels per instance
 
@@ -51,16 +54,19 @@ class Evaluator:
         counterfactuals['Solution'] = counterfactuals['Solution'].apply(lambda x: convert_string_to_array(x,
                                                                                                           timesteps=timesteps,
                                                                                                           channels=channels))
+        #Get the labels of the original instance *when evaluated by the model*
+        og_labels = np.argmax(model.predict(X_sample),axis=1)
 
         # Compute Metrics
         counterfactuals_metrics = self.__compute_metrics(model=model,
+                                                         training_data = X_train,
                                                          counterfactuals=counterfactuals,
                                                          sample=X_sample,
-                                                         og_labels=y_sample,
+                                                         og_labels=og_labels,
                                                          timesteps=timesteps,
                                                          channels=channels)
 
-        dataset_summary = self.__get_dataset_summary(explainer=explainer,
+        dataset_summary = self.__compute_dataset_summary(explainer=explainer,
                                                     dataset=dataset,
                                                      sample=X_sample,
                                                      counterfactuals=counterfactuals,
@@ -70,8 +76,8 @@ class Evaluator:
 
         return counterfactuals_metrics, dataset_summary
 
-    def evaluate_results(self, model, explainer:str, dataset: str, counterfactuals:pd.DataFrame, sample: np.array, og_labels: np.array,
-                         timesteps: int, channels: int, alpha: bool = True, param_config: float = 0.0):
+    def evaluate_results(self, model, explainer:str, dataset: str, counterfactuals:pd.DataFrame, sample: np.ndarray, og_labels: np.ndarray | pd.Series,
+                         training_data: np.ndarray, timesteps: int, channels: int, alpha: bool = True, param_config: float = 0.0):
         """
         Evaluates the counterfactuals using the provided test data.
 
@@ -80,8 +86,9 @@ class Evaluator:
             explainer (str): The name of the explainer.
             dataset (str): The name of the dataset.
             counterfactuals (DataFrame): The counterfactuals to evaluate.
-            sample (np.array): The sample set containing original instances.
-            og_labels (np.array): The original labels of the instances.
+            sample (np.ndarray): The sample set containing original instances.
+            og_labels (np.ndarray | pd.Series): The original labels of the instances when evaluated by the model.
+            training_data (np.ndarray): The training data used for model training.
             timesteps (int): Number of time steps per instance.
             channels (int): Number of channels per instance.
 
@@ -91,12 +98,14 @@ class Evaluator:
 
         # Compute Metrics
         counterfactuals_metrics = self.__compute_metrics(model=model,
+                                                         training_data=training_data,
                                                          counterfactuals=counterfactuals,
                                                          sample=sample,
                                                          og_labels=og_labels,
                                                          timesteps=timesteps,
                                                          channels=channels)
-        dataset_summary = self.__get_dataset_summary(dataset=dataset,
+
+        dataset_summary = self.__compute_dataset_summary(dataset=dataset,
                                                         explainer=explainer,
                                                         sample=sample,
                                                         counterfactuals=counterfactuals,
@@ -121,15 +130,17 @@ class Evaluator:
 
         return X_samples, y_samples
 
-    def __compute_metrics(self, model, counterfactuals: pd.DataFrame, sample: np.array, og_labels: np.array, timesteps,
+    def __compute_metrics(self, model, training_data: np.ndarray, counterfactuals: pd.DataFrame, sample: np.ndarray, og_labels: np.ndarray | pd.Series, timesteps,
                           channels):
         """
         Computes the evaluation metrics for a given counterfactual instance.
 
         Args:
             model (keras.Model): The trained model for making predictions.
+            training_data (np.ndarray): The training data for the model.
             counterfactuals (DataFrame): The counterfactuals to evaluate.
             sample (numpy.ndarray): The sample set containing the original instances.
+            og_labels (numpy.ndarray | pd.Series): The original labels of the instances when evaluated by the model.
             timesteps (int): Number of time steps per instance.
             channels (int): Number of channels per instance.
 
@@ -142,7 +153,8 @@ class Evaluator:
             'Validity': pd.Series(dtype='int'),
             'Proximity L1': pd.Series(dtype='float'),
             'Proximity L2': pd.Series(dtype='float'),
-            'Proximity MAD': pd.Series(dtype='float')
+            'Proximity DTW': pd.Series(dtype='float'),
+            'yNN': pd.Series(dtype='float')
         })
 
         for i in range(len(sample)):
@@ -152,8 +164,10 @@ class Evaluator:
             #Check if there is a counterfactual for this instance
             if i in counterfactuals['Test Instance'].values:
                 # Get all counterfactuals for this instance
-                ces = counterfactuals[counterfactuals['Test Instance'] == i]['Solution']
-                for ce in ces:
+                instance_counterfactuals = counterfactuals[counterfactuals['Test Instance'] == i]
+                for _, counterfactual in instance_counterfactuals.iterrows():
+                    ce = counterfactual['Solution']
+                    label = int(counterfactual['CE Label'])
                     # Compute Sparsity (how many unchanged features)
                     sparsity = self.__get_sparsity(instance, ce)
 
@@ -163,16 +177,29 @@ class Evaluator:
                     #Compute Validity
                     validity = self.__get_validity(model, ce, timesteps, channels, original_label)
 
-                    # Compute Proximity (L1 MAD to original instance)
-                    proximity_MAD = self.__l1_distance_mad(instance, ce)
+
                     #Compute Proximity (L1 distance to original instance)
                     proximity_l1 = self.__l1_distance(instance, ce)
                     # Compute Proximity (L2 distance to original instance)
                     proximity_l2 = self.__l2_distance(instance, ce)
+                    # Compute Proximity (DTW distance to original instance)
+                    proximity_dtw = self.__dynamic_time_warping(instance, ce)
+
+                    #Compute Plausibility (yNN)
+                    plausibility = self._yNN_timeseries(counterfactual=ce,
+                                                        model=model,
+                                                        data=training_data,
+                                                        k=5,
+                                                        label=label)
 
                     # Store results
-                    row_results_dict = {'Sparsity': sparsity, 'Confidence': confidence, 'Validity': validity,
-                                        'Proximity L1': proximity_l1, 'Proximity L2': proximity_l2, 'Proximity MAD': proximity_MAD}
+                    row_results_dict = {'Sparsity': sparsity,
+                                        'Confidence': confidence,
+                                        'Validity': validity,
+                                        'Proximity L1': proximity_l1,
+                                        'Proximity L2': proximity_l2,
+                                        'Proximity DTW': proximity_dtw,
+                                        'yNN': plausibility}
                     row_results_df = pd.DataFrame([row_results_dict])
                     metrics = pd.concat([metrics, row_results_df], ignore_index=True)
             else:
@@ -181,6 +208,57 @@ class Evaluator:
                 continue
 
         return metrics
+
+    def __compute_dataset_summary(self, explainer:str, dataset: str, sample: np.ndarray, counterfactuals:pd.DataFrame,
+                              metrics: pd.DataFrame, alpha: bool = True, param_config: float = 0.0):
+        """
+        Summarizes the evaluation metrics for a dataset by computing the mean values.
+
+        Args:
+            param explainer (str): The name of the explainer.
+            param: dataset (str): The dataset name.
+            param: sample (numpy.ndarray): The sample set containing the original instances.
+            param: counterfactuals (pd.DataFrame): The counterfactuals to evaluate.
+            param: metrics (DataFrame): The computed metrics for each counterfactual.
+            param: alpha (bool): Only applies when explainer = 'confetti'. Only used to inform what was the parameter
+            used to generate the counterfactuals.
+            param: param_config (float): Only applies when explainer = 'confetti'. The parameter configuration used for
+            the explainer.
+
+        Returns:
+            DataFrame: A DataFrame summarizing the evaluation results.
+        """
+        coverage = self.__get_coverage(sample=sample, counterfactuals=counterfactuals)
+        if explainer not in ['confetti_naive', 'confetti_optimized']:
+            summary = {
+                'Explainer': explainer,
+                'Dataset': dataset,
+                'Coverage': coverage,
+                'Sparsity': metrics['Sparsity'].mean(),
+                'Confidence': metrics['Confidence'].mean(),
+                'Validity': metrics['Validity'].mean(),
+                'Proximity L1': metrics['Proximity L1'].mean(),
+                'Proximity L2': metrics['Proximity L2'].mean(),
+                'Proximity DTW': metrics['Proximity DTW'].mean(),
+                'yNN': metrics['yNN'].mean()
+            }
+        else:
+            summary = {
+                'Explainer': explainer,
+                'Alpha': alpha,
+                'Param Config': param_config,
+                'Dataset': dataset,
+                'Coverage': coverage,
+                'Sparsity': metrics['Sparsity'].mean(),
+                'Confidence': metrics['Confidence'].mean(),
+                'Validity': metrics['Validity'].mean(),
+                'Proximity L1': metrics['Proximity L1'].mean(),
+                'Proximity L2': metrics['Proximity L2'].mean(),
+                'Proximity DTW': metrics['Proximity DTW'].mean(),
+                'yNN': metrics['yNN'].mean()
+            }
+
+        return pd.DataFrame([summary])
 
     def __get_model(self, dataset: str, model:str):
         """
@@ -217,56 +295,7 @@ class Evaluator:
         else:
             return pd.read_csv(cfg.RESULTS_DIR / dataset / f'{explainer}_{dataset}_{model}_counterfactuals.csv')
 
-    def __get_dataset_summary(self, explainer:str, dataset: str, sample: np.array, counterfactuals:pd.DataFrame,
-                              metrics: pd.DataFrame, alpha: bool = True, param_config: float = 0.0):
-        """
-        Summarizes the evaluation metrics for a dataset by computing the mean values.
-
-        Args:
-            param explainer (str): The name of the explainer.
-            param: dataset (str): The dataset name.
-            param: sample (numpy.ndarray): The sample set containing the original instances.
-            param: counterfactuals (pd.DataFrame): The counterfactuals to evaluate.
-            param: metrics (DataFrame): The computed metrics for each counterfactual.
-            param: alpha (bool): Only applies when explainer = 'confetti'. Only used to inform what was the parameter
-            used to generate the counterfactuals.
-            param: param_config (float): Only applies when explainer = 'confetti'. The parameter configuration used for
-            the explainer.
-
-        Returns:
-            DataFrame: A DataFrame summarizing the evaluation results.
-        """
-        coverage = self.__get_coverage(sample=sample, counterfactuals=counterfactuals)
-        if explainer not in ['confetti_naive', 'confetti_optimized']:
-            summary = {
-                'Explainer': explainer,
-                'Dataset': dataset,
-                'Coverage': coverage,
-                'Sparsity': metrics['Sparsity'].mean(),
-                'Confidence': metrics['Confidence'].mean(),
-                'Validity': metrics['Validity'].mean(),
-                'Proximity L1': metrics['Proximity L1'].mean(),
-                'Proximity L2': metrics['Proximity L2'].mean(),
-                'Proximity MAD': metrics['Proximity MAD'].mean()
-            }
-        else:
-            summary = {
-                'Explainer': explainer,
-                'Alpha': alpha,
-                'Param Config': param_config,
-                'Dataset': dataset,
-                'Coverage': coverage,
-                'Sparsity': metrics['Sparsity'].mean(),
-                'Confidence': metrics['Confidence'].mean(),
-                'Validity': metrics['Validity'].mean(),
-                'Proximity L1': metrics['Proximity L1'].mean(),
-                'Proximity L2': metrics['Proximity L2'].mean(),
-                'Proximity MAD': metrics['Proximity MAD'].mean()
-            }
-
-        return pd.DataFrame([summary])
-
-    def __get_coverage(self, sample: np.array, counterfactuals: pd.DataFrame) -> float:
+    def __get_coverage(self, sample: np.ndarray, counterfactuals: pd.DataFrame) -> float:
         """
         Compute the coverage of the counterfactuals.
 
@@ -296,7 +325,7 @@ class Evaluator:
         counterfactual (pd.DataFrame): The counterfactual instance.
         timesteps (int): Number of time steps per instance.
         channels (int): Number of channels per instance.
-        original_label (int): The original label of the instance.
+        original_label (int): The original label of the instance when evaluated by the model.
 
         Returns:
         float: Confidence value.
@@ -307,7 +336,7 @@ class Evaluator:
         ce_label = np.argmax(model.predict(counterfactual.reshape(1, timesteps, channels)))
         return 0 if original_label == ce_label else 1
 
-    def __l1_distance(self, ts1:np.array, ts2:np.array):
+    def __l1_distance(self, ts1:np.ndarray, ts2:np.ndarray):
         """
         Compute the Manhattan (L1) distance between two multivariate time series.
 
@@ -321,7 +350,7 @@ class Evaluator:
             raise ValueError("Time series must have the same shape (Timesteps, Dimensions).")
         return np.sum(np.abs(ts1 - ts2))
 
-    def __l2_distance(self, ts1:np.array, ts2:np.array):
+    def __l2_distance(self, ts1:np.ndarray, ts2:np.ndarray):
         """
         Compute the Euclidean (L2) distance between two multivariate time series.
 
@@ -335,35 +364,103 @@ class Evaluator:
             raise ValueError("Time series must have the same shape (Timesteps, Dimensions).")
         return np.sqrt(np.sum((ts1 - ts2) ** 2))
 
-    def __mad_normalization(self, ts):
+    def __dynamic_time_warping(self, ts1:np.ndarray, ts2:np.ndarray) -> float:
         """
-        Compute the Median Absolute Deviation (MAD) for each feature in a multivariate time series.
-
-        Parameters:
-        ts (2D numpy array): Time series of shape (T, D)
-
-        Returns:
-        1D numpy array: MAD values for each feature (D,)
-        """
-        median = np.median(ts, axis=0)
-        mad = np.median(np.abs(ts - median), axis=0)
-        mad[mad == 0] = 1e-9  # Avoid division by zero
-        return mad
-
-    def __l1_distance_mad(self, ts1:np.array, ts2:np.array):
-        """
-        Compute the Manhattan (L1) distance between two multivariate time series,
-        normalizing the differences using MAD.
+        Compute the Dynamic Time Warping (DTW) distance between two multivariate time series.
 
         Parameters:
         ts1, ts2 (2D numpy arrays): Time series of shape (T, D)
 
         Returns:
-        float: Normalized Manhattan distance.
+        float: DTW distance.
         """
         if ts1.shape != ts2.shape:
-            raise ValueError("Time series must have the same shape (T, D).")
+            raise ValueError("Time series must have the same shape (Timesteps, Dimensions).")
+        return dtw(ts1, ts2)
 
-        stack = np.vstack((ts1, ts2))
-        mad_values = self.__mad_normalization(stack)  # Compute MAD over both series
-        return np.sum(np.abs(ts1 - ts2) / mad_values)
+    def _yNN_timeseries(self,
+            counterfactual: np.ndarray,
+            model: keras.Model,
+            data : np.ndarray,
+            k: int,
+            label: int | None = None,
+    ):
+        """
+        y‑Nearest‑Neighbours (yNN) label‑diversity score for time‑series
+        counterfactuals.
+
+        Parameters
+        ----------
+        counterfactual : np.ndarray
+            Counterfactual, shaped (Timesteps, Dimensions).
+        model : keras.Model
+            Trained Keras classifier returning either logits or probabilities for
+            shape (batch, num_classes) when given input (batch, Timesteps, Dimensions).
+        data : np.ndarray
+            Original data set in the same (Timesteps, Dimensions) orientation. Can include an
+            arbitrary batch dimension.
+        k : int
+            Number of nearest neighbours considered per counterfactual.
+        label : int | None, default=None
+            Optional pre‑computed label; if *None* the function falls back to
+            ``np.argmax(model.predict(counterfactual))`` as before.
+
+        Returns
+        -------
+        np.ndarray | float
+            * ``np.ndarray(shape=(1,))`` if only one counterfactual is given.
+            * Global ``float`` score otherwise.
+        """
+
+        # Infer / validate labels
+        if label is None:
+            label = np.argmax(model.predict(counterfactual.reshape(1, *counterfactual.shape), verbose=0), axis=1)
+
+
+        # Extract shape info
+        T, D = counterfactual.shape  # timesteps, dimensions
+
+        # Build joint pool (original data + CFs)
+        data_pool = np.concatenate(
+            (
+                np.asarray(data).reshape(-1, T, D),
+                np.array(counterfactual).reshape(-1, T, D),
+            ),
+            axis=0,
+        )
+
+        # tslearn expects (batch, timesteps, features) ⟹ already (T, D)
+        nbrs = KNeighborsTimeSeries(n_neighbors=k, metric="dtw")
+        nbrs.fit(data_pool)
+
+        # Score neighbourhoods
+        p = len(counterfactual)  # no. of CFs
+        n_diff = 0  # neighbour‑label disagreements accumulator
+
+        # y nearest neighbour indices (distance values not needed)
+        nn_idx = nbrs.kneighbors(counterfactual.reshape(1, T, D), return_distance=False)[0]
+
+        for j in nn_idx:
+            neighbour = data_pool[j: j + 1]  # shape (1, T, D)
+            preds = model.predict(neighbour, verbose=0)  # (1, C)
+
+            # Convert to probabilities if logits
+            if not np.allclose(preds.sum(axis=1), 1.0):
+                preds = self._numpy_softmax(preds)
+
+            if label != int(np.argmax(preds)):
+                n_diff += 1
+
+        # Final score(s)
+        if p == 1:
+            return np.ndarray([1 - (1 / (p * k)) * n_diff])
+
+        # (Keeping original denominator “T * y”, although “p * y” may be preferred.)
+        return 1 - (1 / (T * k)) * n_diff
+
+    def _numpy_softmax(self, logits: np.ndarray) -> np.ndarray:
+        """Compute softmax along axis 1 using NumPy only."""
+        logits = logits.astype(np.float64)
+        logits -= logits.max(axis=1, keepdims=True)  # numerical stability
+        exp = np.exp(logits)
+        return exp / exp.sum(axis=1, keepdims=True)

@@ -6,7 +6,7 @@ DATASETS = [
     'ArticularyWordRecognition', 'BasicMotions', 'Epilepsy',
     'ERing', 'Libras', 'NATOPS', 'RacketSports'
 ]
-CONFETTI_ALPHA = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
+CONFETTI_ALPHA = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
 CONFETTI_THETA = [0.55, 0.65, 0.75, 0.85, 0.95]
 EXPLAINERS = [
     ("comte", "Comte"),
@@ -27,9 +27,8 @@ def eval_config(args):
     except FileNotFoundError:
         print(f"File not found for {display_name} - {dataset} - {model} - {extra_kwargs}. Skipping.")
         return None
-    except Exception as e:
-        print(f"Failed for {display_name} - {dataset} - {model} - {extra_kwargs}: {e}")
-        return None
+
+
 
 def evaluate_results_parallel():
     configs = []
