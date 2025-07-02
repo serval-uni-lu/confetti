@@ -49,11 +49,7 @@ def run_confetti_counterfactuals(model_name=None):
                                                    save_weights=True, data_type='training')
 
         #Create Explainer
-        ce = CONFETTI(model_path=model_path,
-                      X_test=X_samples,
-                      reference_data=X_train,
-                      weights=training_weights,
-                      n_partitions=2)
+        ce = CONFETTI(model_path=model_path)
 
         # — Experiment 1: Alphas —
         alphas = params.get('alphas', [])
@@ -62,11 +58,13 @@ def run_confetti_counterfactuals(model_name=None):
                           leave=False):
             start = time.time()
             ces_naive, ces_optimized = ce.parallelized_counterfactual_generator(
-                ce_dir,
-                save_counterfactuals=False,
-                processes=8,
+                instances_to_explain=X_samples,
+                reference_data=X_train,
+                reference_weights=training_weights,
                 alpha=alpha,
                 theta=cfg.FIXED_THETA,
+                n_partitions=2,
+                processes=8,
                 verbose=True
             )
             elapsed = time.time() - start
@@ -98,11 +96,13 @@ def run_confetti_counterfactuals(model_name=None):
                           leave=False):
             start = time.time()
             ces_naive, ces_optimized  = ce.parallelized_counterfactual_generator(
-                ce_dir,
-                save_counterfactuals=False,
-                processes=8,
+                instances_to_explain=X_samples,
+                reference_data=X_train,
+                reference_weights=training_weights,
                 alpha=cfg.FIXED_ALPHA,
                 theta=theta,
+                n_partitions=2,
+                processes=8,
                 verbose=True
             )
             elapsed = time.time() - start

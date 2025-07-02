@@ -64,5 +64,19 @@ CHECK_POINT = {
     }
 }
 
+TS_LENGTHS = {'ArticularyWordRecognition': 144,
+              'BasicMotions':100,
+              'Epilepsy': 207,
+              'ERing': 65,
+              'Libras': 45,
+              'NATOPS': 51,
+              'RacketSports': 30}
+TS_DIMENSIONS = {'ArticularyWordRecognition': 9,
+              'BasicMotions': 6,
+              'Epilepsy': 3,
+              'ERing': 4,
+              'Libras': 2,
+              'NATOPS': 24,
+              'RacketSports': 6}
 
 
