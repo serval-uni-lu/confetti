@@ -1,27 +1,31 @@
+import time
 from typing import Optional, List
+import warnings
 import copy
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import keras
-from pathlib import Path
+import tensorflow as tf
+tf.keras.utils.disable_interactive_logging()
+
 from tslearn.neighbors import KNeighborsTimeSeries
+
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.optimize import minimize
 from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.operators.crossover.pntx import TwoPointCrossover
 from pymoo.operators.mutation.bitflip import BitflipMutation
 from pymoo.operators.sampling.rnd import BinaryRandomSampling
-from multiprocessing import Pool
-from functools import partial
 from pymoo.termination import get_termination
 from .problem import CounterfactualProblem
+
+from multiprocessing import Pool
+from functools import partial
+
 from .utils import convert_string_to_array, array_to_string
 from .errors import CONFETTIConfigurationError
-import time
-import tensorflow as tf
-tf.keras.utils.disable_interactive_logging()
-
 
 
 class CONFETTI:
@@ -143,7 +147,7 @@ class CONFETTI:
         # Filter by confidence threshold
         keep_mask = confidences >= theta
         if not any(keep_mask):
-            return None, None  # Or handle fallback case
+            return None, None
 
         # Return filtered distances and corresponding indices
         final_distances = dist[0][keep_mask]
@@ -416,7 +420,7 @@ class CONFETTI:
                                             theta=theta)
         if nun_result[0] is None:
             if verbose:
-                print(f'No NUN found for instance {test_instance} with theta {theta}.')
+                warnings.warn(f"No NUN found for instance {test_instance} with theta {theta}.", UserWarning)
             return None, None, None
         else:
             nun = int(nun_result[1][0])

@@ -58,19 +58,14 @@ def run_execution_time_experiment(model_name='fcn', alpha=0.5, theta=0.51):
         for i in tqdm(range(len(X_samples)), desc=f"{dataset} - Timing instances", leave=False):
             X_i = X_samples[i:i + 1]  # Keep shape (1, T, D)
 
-            ce = CONFETTI(
-                model_path=model_path,
-                X_test=X_i,
-                reference_data=X_train,
-                weights=training_weights,
-                n_partitions=2
-            )
+            ce = CONFETTI(model_path=model_path)
 
             start = time.time()
             _ = ce.counterfactual_generator(
-                directory=None,
-                save_counterfactuals=False,
-                optimization=True,
+                instances_to_explain=X_i,
+                reference_data= X_train,
+                reference_weights=training_weights,
+                n_partitions=2,
                 alpha=alpha,
                 theta=theta,
                 verbose=True

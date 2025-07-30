@@ -54,6 +54,20 @@ class Evaluator:
         counterfactuals['Solution'] = counterfactuals['Solution'].apply(lambda x: convert_string_to_array(x,
                                                                                                           timesteps=timesteps,
                                                                                                           channels=channels))
+        if explainer == 'confetti_optimized':
+            naive_counterfactuals = self.__get_counterfactuals('confetti_naive', dataset, model_name, alpha, param_config)
+            naive_counterfactuals['Solution'] = naive_counterfactuals['Solution'].apply(lambda x: convert_string_to_array(x,
+                                                                                                          timesteps=timesteps,
+                                                                                                          channels=channels))
+            # Find Test Instances present in naive but missing in optimized
+            missing_instances = naive_counterfactuals[
+                ~naive_counterfactuals['Test Instance'].isin(counterfactuals['Test Instance'])
+            ]
+
+            # Append missing rows to the counterfactuals DataFrame
+            counterfactuals = pd.concat([counterfactuals, missing_instances], ignore_index=True)
+
+
         #Get the labels of the original instance *when evaluated by the model*
         og_labels = np.argmax(model.predict(X_sample),axis=1)
 
@@ -76,8 +90,18 @@ class Evaluator:
 
         return counterfactuals_metrics, dataset_summary
 
-    def evaluate_results(self, model, explainer:str, dataset: str, counterfactuals:pd.DataFrame, sample: np.ndarray, og_labels: np.ndarray | pd.Series,
-                         training_data: np.ndarray, timesteps: int, channels: int, alpha: bool = True, param_config: float = 0.0):
+    def evaluate_results(self, model,
+                         explainer:str,
+                         dataset: str,
+                         counterfactuals:pd.DataFrame,
+                         sample: np.ndarray,
+                         og_labels: np.ndarray | pd.Series,
+                         training_data: np.ndarray,
+                         timesteps: int,
+                         channels: int,
+                         alpha: bool = True,
+                         param_config: float = 0.0,
+                         fallback_counterfactuals:pd.DataFrame = None):
         """
         Evaluates the counterfactuals using the provided test data.
 
@@ -95,6 +119,14 @@ class Evaluator:
         Returns:
             DataFrame: A DataFrame containing the evaluation results.
         """
+        if fallback_counterfactuals is not None:
+            # Find Test Instances present in naive but missing in optimized
+            missing_instances = fallback_counterfactuals[
+                ~fallback_counterfactuals['Test Instance'].isin(counterfactuals['Test Instance'])
+            ]
+
+            # Append missing rows to the counterfactuals DataFrame
+            counterfactuals = pd.concat([counterfactuals, missing_instances], ignore_index=True)
 
         # Compute Metrics
         counterfactuals_metrics = self.__compute_metrics(model=model,
@@ -313,8 +345,21 @@ class Evaluator:
         coverage = (n_covered / n_total) * 100
         return coverage
 
-    def __get_sparsity(self, original: pd.DataFrame, counterfactual: pd.DataFrame):
+    def __get_sparsity(self, original: np.array, counterfactual: np.array):
+        """
+        Compute the sparsity of the counterfactual in terms of unchanged timesteps.
+
+        Parameters:
+        original (np.array): The original instance.
+        counterfactual (np.array): The counterfactual instance.
+
+        Returns:
+        float: Sparsity timesteps value.
+        """
+        if original.shape != counterfactual.shape:
+            raise ValueError("Original and counterfactual must have the same shape.")
         return np.mean(original.flatten() == counterfactual.flatten())
+
 
     def __get_confidence(self, model, counterfactual, timesteps, channels, original_label):
         """

@@ -29,23 +29,18 @@ def run_experiment(model_name:str = 'fcn'):
     X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
     training_weights = compute_weights_cam(model=model, X_data=X_train, dataset=dataset,
                                                save_weights=False, data_type='training')
-    exp = CONFETTI(
-        model_path=model_path,
-        X_test=X_samples,
-        reference_data=X_train,
-        weights=training_weights,
-    )
+    exp = CONFETTI(model_path=model_path)
     ce_dir = cfg.RESULTS_DIR / dataset
     # Create a dict to store results
     results = {'Partitions': [], 'Execution Time' :[], 'Sparsity':[], 'Confidence':[]}
     for partition in partitions:
         start_time = time.time()
         ces_naive, ces_optimized = exp.parallelized_counterfactual_generator(
-            ce_dir,
-            save_counterfactuals=False,
+            instances_to_explain=X_samples,
+            reference_data=X_train,
+            reference_weights=training_weights,
+            n_partitions=partition,
             processes=6,
-            alpha=0.5,
-            theta=0.51,
             verbose=True
         )
         end_time = time.time()
