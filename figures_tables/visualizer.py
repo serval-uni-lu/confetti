@@ -159,28 +159,48 @@ def boxplot_all_tradeoffs_by_model(results_alpha: pd.DataFrame, results_theta: p
     tradeoffs = [
         ('Sparsity', 'Param Config',
          'i. Sparsity (α control)',
-         r'$\alpha$ (Confidence weight)', 'Sparsity', results_alpha),
+         r'$\alpha$ (Confidence weight)', 'Sparsity', results_alpha, 'alpha'),
 
         ('Sparsity', 'Param Config',
          'ii. Sparsity (θ control)',
-         r'$\theta$ (Confidence threshold)', 'Sparsity', results_theta),
+         r'$\theta$ (Confidence threshold)', 'Sparsity', results_theta, 'theta'),
 
         ('Confidence', 'Param Config',
          'iii. Confidence (α control)',
-         r'$\alpha$ (Confidence weight)', 'Confidence', results_alpha),
+         r'$\alpha$ (Confidence weight)', 'Confidence', results_alpha, 'alpha'),
 
         ('Confidence', 'Param Config',
          'iv. Confidence (θ control)',
-         r'$\theta$ (Confidence threshold)', 'Confidence', results_theta),
+         r'$\theta$ (Confidence threshold)', 'Confidence', results_theta, 'theta'),
 
         ('Proximity DTW', 'Param Config',
          'v. Proximity DTW (α control)',
-         r'$\alpha$ (Confidence weight)', 'Proximity (DTW)', results_alpha),
+         r'$\alpha$ (Confidence weight)', 'Proximity (DTW)', results_alpha, 'alpha'),
 
         ('Proximity DTW', 'Param Config',
          'vi. Proximity DTW (θ control)',
-         r'$\theta$ (Confidence threshold)', 'Proximity (DTW)', results_theta),
+         r'$\theta$ (Confidence threshold)', 'Proximity (DTW)', results_theta, 'theta'),
     ]
+    # Collect statistics
+    summary_rows = []
+    for y_metric, x_param, _, _, _, df, param_type in tradeoffs:
+        grouped = df.groupby(["Model", "Explainer", x_param])[y_metric]
+        stats = grouped.describe(percentiles=[0.25, 0.5, 0.75])
+        for (model, explainer, param_config), row in stats.iterrows():
+            summary_rows.append({
+                "Model": model,
+                "Parameter": param_type,
+                "Param Config": param_config,
+                "Metric": y_metric,
+                "min": row["min"],
+                "1st quart": row["25%"],
+                "med": row["50%"],
+                "3rd quart": row["75%"],
+                "max": row["max"]
+            })
+
+    summary_df = pd.DataFrame(summary_rows)
+    summary_df.to_csv("boxplot_summary.csv", index=False)
 
     palette = {"fcn": "#64CDC0", "resnet": "#ff595a"}
 
@@ -188,7 +208,7 @@ def boxplot_all_tradeoffs_by_model(results_alpha: pd.DataFrame, results_theta: p
     fig, axes = plt.subplots(3, 2, figsize=(14, 12), sharey=False)
     axes = axes.flatten()
 
-    for ax, (y_metric, x_param, title, xlabel, ylabel, df) in zip(axes, tradeoffs):
+    for ax, (y_metric, x_param, title, xlabel, ylabel, df, _) in zip(axes, tradeoffs):
         sns.boxplot(
             data=df,
             x=x_param,
@@ -385,6 +405,23 @@ def plot_method_comparison_with_cam(sample, counterfactuals_dict, cam, dimension
 
     sample_reshaped = sample.T
     timesteps = np.arange(sample.shape[0])
+
+    # =====================
+    # Save data as CSV
+    # =====================
+    data_dict = {"timestep": timesteps, "Original": sample_reshaped[dimension_idx]}
+    for method, cf_array in counterfactuals_dict.items():
+        cf_reshaped = cf_array.T
+        data_dict[method] = cf_reshaped[dimension_idx]
+    df_out = pd.DataFrame(data_dict)
+
+    # Generate filename for CSV
+    if title:
+        csv_filename = f"{title.replace(' ', '_').lower()}_data.csv"
+    else:
+        csv_filename = f"dimension_{dimension_idx + 1}_data.csv"
+
+    df_out.to_csv(csv_filename, index=False)
 
     plt.style.use('seaborn-v0_8-darkgrid')
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(18, 6), sharex=True, gridspec_kw={'height_ratios': [3, 0.2]})

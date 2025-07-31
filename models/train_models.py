@@ -1,11 +1,12 @@
 from models.resnet import ClassifierRESNET
+from models.fcn import ClassifierFCN
 from confetti.explainer.utils import load_data
 import numpy as np
 import config as cfg
 import keras
 
-def train_model():
-    DATASETS = ['BasicMotions']
+def train_model(model_name:str):
+    DATASETS = cfg.DATASETS
     for dataset in DATASETS:
         output_dir = cfg.TRAINED_MODELS_DIR / dataset
 
@@ -19,14 +20,21 @@ def train_model():
         print("Labels encoded successfully.")
 
         nb_classes = len(np.unique(np.concatenate([y_train,y_test])))
-        input_shape = X_train.shape[1:] #The input shape for our CNN should be (timesteps, dimensions)
+        input_shape = X_train.shape[1:] #The input shape for our DNN should be (timesteps, dimensions)
 
-
-        model = ClassifierRESNET(output_directory=output_dir,
-                                 input_shape=input_shape,
-                                 nb_classes=nb_classes,
-                                 dataset_name=dataset,
-                                 verbose=True)
+        if model_name == 'fcn':
+            print("Creating FCN model...")
+            model = ClassifierFCN(input_shape=input_shape,
+                                  nb_classes=nb_classes,
+                                  dataset_name=dataset,
+                                  verbose=True)
+        else:
+            print("Creating ResNet model...")
+            model = ClassifierRESNET(output_directory=output_dir,
+                                     input_shape=input_shape,
+                                     nb_classes=nb_classes,
+                                     dataset_name=dataset,
+                                     verbose=True)
         print("Model created successfully.")
         print("Training starting...")
         model.fit(x_train=X_train,
@@ -36,7 +44,9 @@ def train_model():
                   y_true=y_test)  # y_true is used for metrics calculation
 
 def main():
-    train_model()
+    #This script will train FCN and ResNet models for all datasets.
+    train_model("fcn")
+    train_model("resnet")
 
 if __name__ == "__main__":
     main()
