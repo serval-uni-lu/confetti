@@ -294,7 +294,7 @@ def confidence_ranks():
 
 
 def main():
-    #overall_scores()
+    overall_scores()
     sparsity_ranks()
     confidence_ranks()
 
