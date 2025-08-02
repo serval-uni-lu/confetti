@@ -4,6 +4,11 @@ import pandas as pd
 import numpy as np
 from typing import Optional
 
+# Force matplotlib to embed text as TrueType fonts (avoids Type 3 fonts)
+plt.rcParams['pdf.fonttype'] = 42   # Output text as TrueType in PDF
+plt.rcParams['ps.fonttype'] = 42    # Output text as TrueType in PS
+plt.rcParams['svg.fonttype'] = 'none'  # Keep text as text in SVG
+
 def boxplot_single_tradeoff(data: pd.DataFrame, metric1: Optional[str] = 'sparsity',
                      metric2: Optional[str] = 'confidence', parameter : Optional[str] = 'alpha') -> None:
     """
@@ -173,13 +178,6 @@ def boxplot_all_tradeoffs_by_model(results_alpha: pd.DataFrame, results_theta: p
          'iv. Confidence (θ control)',
          r'$\theta$ (Confidence threshold)', 'Confidence', results_theta, 'theta'),
 
-        ('Proximity DTW', 'Param Config',
-         'v. Proximity DTW (α control)',
-         r'$\alpha$ (Confidence weight)', 'Proximity (DTW)', results_alpha, 'alpha'),
-
-        ('Proximity DTW', 'Param Config',
-         'vi. Proximity DTW (θ control)',
-         r'$\theta$ (Confidence threshold)', 'Proximity (DTW)', results_theta, 'theta'),
     ]
     # Collect statistics
     summary_rows = []
@@ -205,7 +203,7 @@ def boxplot_all_tradeoffs_by_model(results_alpha: pd.DataFrame, results_theta: p
     palette = {"fcn": "#64CDC0", "resnet": "#ff595a"}
 
     plt.style.use('seaborn-v0_8-darkgrid')
-    fig, axes = plt.subplots(3, 2, figsize=(14, 12), sharey=False)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharey=False)
     axes = axes.flatten()
 
     for ax, (y_metric, x_param, title, xlabel, ylabel, df, _) in zip(axes, tradeoffs):
@@ -223,10 +221,10 @@ def boxplot_all_tradeoffs_by_model(results_alpha: pd.DataFrame, results_theta: p
         else:
             ax.set_ylim(0, 60)
 
-        ax.set_title(title, fontsize=16)
-        ax.set_xlabel(xlabel, fontsize=14)
-        ax.set_ylabel(ylabel, fontsize=14)
-        ax.tick_params(axis='both', labelsize=12)
+        ax.set_title(title, fontsize=18)
+        ax.set_xlabel(xlabel, fontsize=16)
+        ax.set_ylabel(ylabel, fontsize=16)
+        ax.tick_params(axis='both', labelsize=14)
         ax.grid(True, linestyle='--', alpha=0.9)
         ax.legend(title='Model', loc='best', fontsize=12, title_fontsize=12)
 
@@ -387,47 +385,30 @@ def plot_counterfactual_with_cam_as_line(sample: np.ndarray,
 def plot_method_comparison_with_cam(sample, counterfactuals_dict, cam, dimension_idx, title=""):
     """
     Plot the original time series and counterfactual segments that differ from the original, for a given dimension,
-    along with a CAM heatmap.
-
-    Parameters
-    ----------
-    sample : np.ndarray
-        Original multivariate time series sample of shape (timesteps, channels).
-    counterfactuals_dict : dict
-        Dictionary where keys are method names and values are counterfactual arrays of the same shape as sample.
-    cam : np.ndarray
-        Class Activation Map (CAM) for the given instance, shape (timesteps,).
-    dimension_idx : int
-        Index of the dimension/channel to plot.
-    title : str, optional
-        Title for the plot (e.g., "Dimension 4").
+    along with a CAM heatmap. This version generates a larger, taller figure for single-column LaTeX use,
+    with the legend positioned in the upper left.
     """
 
     sample_reshaped = sample.T
     timesteps = np.arange(sample.shape[0])
 
-    # =====================
     # Save data as CSV
-    # =====================
     data_dict = {"timestep": timesteps, "Original": sample_reshaped[dimension_idx]}
     for method, cf_array in counterfactuals_dict.items():
         cf_reshaped = cf_array.T
         data_dict[method] = cf_reshaped[dimension_idx]
     df_out = pd.DataFrame(data_dict)
 
-    # Generate filename for CSV
-    if title:
-        csv_filename = f"{title.replace(' ', '_').lower()}_data.csv"
-    else:
-        csv_filename = f"dimension_{dimension_idx + 1}_data.csv"
-
-    df_out.to_csv(csv_filename, index=False)
+    df_out.to_csv("methods_comparison_data.csv", index=False)
 
     plt.style.use('seaborn-v0_8-darkgrid')
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(18, 6), sharex=True, gridspec_kw={'height_ratios': [3, 0.2]})
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, figsize=(7, 6), sharex=True, gridspec_kw={'height_ratios': [3, 0.25]}
+    )
 
     # Original time series
-    ax1.plot(timesteps, sample_reshaped[dimension_idx], label="Original Time Series", color='#B0B1B2', linewidth=2)
+    ax1.plot(timesteps, sample_reshaped[dimension_idx], label="Original",
+             color='#B0B1B2', linewidth=2)
 
     # Plot counterfactuals only where they differ
     linestyles = ['--', ':', '-.', (0, (3, 1, 1, 1))]
@@ -448,28 +429,28 @@ def plot_method_comparison_with_cam(sample, counterfactuals_dict, cam, dimension
                          [cf_reshaped[dimension_idx, end_diff], sample_reshaped[dimension_idx, end_diff + 1]],
                          color=color, linewidth=2)
 
-    ax1.set_title(title or f"Dimension {dimension_idx + 1}",fontsize=20)
-    ax1.set_ylabel("Value", fontsize=17)
-    ax1.legend(loc='upper right', fontsize=15)
-    ax1.grid(True)
+    # Fonts and layout for single-column figure
+    ax1.set_title(title or f"Dimension {dimension_idx + 1}", fontsize=16)
+    ax1.set_ylabel("Value", fontsize=14)
+    ax1.legend(loc='upper left', fontsize=12)  # Changed to upper left
+    ax1.tick_params(axis='both', labelsize=13)
+    ax1.grid(True, linewidth=0.5)
 
     # Normalize CAM
     cam_normalized = np.interp(cam, (cam.min(), cam.max()), (0, 1))
-    ax2.imshow(cam_normalized[np.newaxis, :], aspect='auto', cmap='YlOrRd', extent=[0, len(timesteps), 0, 1])
+    ax2.imshow(cam_normalized[np.newaxis, :], aspect='auto', cmap='YlOrRd',
+               extent=[0, len(timesteps), 0, 1])
     ax2.set_yticks([0.5])
-    ax2.set_yticklabels(["CAM"], fontsize=16, rotation='vertical')
-    ax2.set_xlabel("Time", fontsize=17)
+    ax2.set_yticklabels(["CAM"], fontsize=13, rotation='vertical')
+    ax2.set_xlabel("Time", fontsize=14)
+    ax2.tick_params(axis='x', labelsize=13)
     ax2.grid(False)
 
     plt.tight_layout()
-
-    # Save as PDF (optional)
-    if title:
-        filename = f"{title.replace(' ', '_').lower()}.pdf"
-    else:
-        filename = f"dimension_{dimension_idx + 1}.pdf"
-    plt.savefig(filename, format="pdf", bbox_inches="tight")
+    plt.savefig("methods.pdf", format="pdf", bbox_inches="tight")
     plt.show()
+
+
 
 def plot_method_comparison_separated_with_cam(sample: np.ndarray,
                                            counterfactuals: dict,
