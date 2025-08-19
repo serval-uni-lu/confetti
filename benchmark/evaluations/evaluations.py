@@ -32,12 +32,13 @@ def eval_config(args):
 
 def evaluate_results_parallel():
     configs = []
-    # Baseline explainers (comte, sets, tsevo)
+    # Baseline explainers
     for explainer, display_name in EXPLAINERS:
         for dataset in DATASETS:
             for model in MODELS:
                 configs.append((explainer, dataset, model, display_name, {}))
-    # Confetti (naive/optimized) for alpha
+
+    # Confetti standard runs
     for confetti in ['confetti_naive', 'confetti_optimized']:
         for dataset in DATASETS:
             for model in MODELS:
@@ -45,14 +46,20 @@ def evaluate_results_parallel():
                     extra_kwargs = {"alpha": True, "param_config": alpha}
                     display_name = f"{confetti.replace('_', ' ').title()} (alpha={alpha})"
                     configs.append((confetti, dataset, model, display_name, extra_kwargs))
-    # Confetti (naive/optimized) for theta
-    for confetti in ['confetti_naive', 'confetti_optimized']:
-        for dataset in DATASETS:
-            for model in MODELS:
                 for theta in CONFETTI_THETA:
                     extra_kwargs = {"alpha": False, "param_config": theta}
                     display_name = f"{confetti.replace('_', ' ').title()} (theta={theta})"
                     configs.append((confetti, dataset, model, display_name, extra_kwargs))
+
+    # Ablation Study as a separate explainer
+    for dataset in DATASETS:
+        for model in MODELS:
+            for alpha in CONFETTI_ALPHA:
+                extra_kwargs = {"alpha": True, "param_config": alpha}
+                configs.append(("ablation_study", dataset, model, f"Ablation Study (alpha={alpha})", extra_kwargs))
+            for theta in CONFETTI_THETA:
+                extra_kwargs = {"alpha": False, "param_config": theta}
+                configs.append(("ablation_study", dataset, model, f"Ablation Study (theta={theta})", extra_kwargs))
 
     summaries = []
     with ProcessPoolExecutor() as executor:
@@ -63,12 +70,12 @@ def evaluate_results_parallel():
                 summaries.append(result)
 
     if summaries:
-        final_df = pd.concat(summaries, ignore_index=True, sort=True)  # <-- This ensures all columns are kept
+        final_df = pd.concat(summaries, ignore_index=True, sort=True)
         print(final_df)
-        # You can save the results if you want:
         final_df.to_csv("all_evaluation_results.csv", index=False)
     else:
         print("No valid results found.")
+
 
 def main():
     evaluate_results_parallel()

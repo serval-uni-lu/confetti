@@ -96,7 +96,7 @@ plot_method_comparison_with_cam(sample, counterfactuals_dict, nun_weight, dimens
                                 title="Counterfactual Comparison for a Single Dimension (4th Dimension)")
 
 ## Figure 2. Sensitivity Analysis
-# Obtain all the rows where the Explainer contains somehow 'confetti'
+ #Obtain all the rows where the Explainer contains somehow 'confetti'
 confetti_results = results[results['Explainer'].str.contains('Confetti Optimized', case=False, na=False)]
 results_alphas = confetti_results[confetti_results['Alpha'] == True]
 results_thetas = confetti_results[confetti_results['Alpha'] == False]

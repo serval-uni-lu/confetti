@@ -15,7 +15,7 @@ import numpy as np
 tf.keras.utils.disable_interactive_logging()
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-def run_confetti_counterfactuals(model_name=None):
+def run_confetti_counterfactuals(model_name=None, ablation_study=False):
     # — load or initialize checkpoint.json —
     cp_path = cfg.RESULTS_DIR / "checkpoint.json"
     if cp_path.exists():
@@ -26,8 +26,10 @@ def run_confetti_counterfactuals(model_name=None):
         cp_path.parent.mkdir(parents=True, exist_ok=True)
         with open(cp_path, "w") as f:
             json.dump(checkpoint, f, indent=2)
-
-    time_file = cfg.RESULTS_DIR / f"execution_times_confetti_{model_name}.csv"
+    if ablation_study:
+        time_file = cfg.RESULTS_DIR / f"execution_times_confetti_{model_name}_ablation_study.csv"
+    else:
+        time_file = cfg.RESULTS_DIR / f"execution_times_confetti_{model_name}.csv"
     if not time_file.exists():
         pd.DataFrame(columns=['Dataset', 'Alpha', 'Theta', 'Execution Time']) \
             .to_csv(time_file, index=False)
@@ -45,7 +47,8 @@ def run_confetti_counterfactuals(model_name=None):
         # load samples of the specific model
         sample_file = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
         X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
-        training_weights = cam.compute_weights_cam(model=model, X_data=X_train, dataset=dataset,
+        if ablation_study is False:
+            training_weights = cam.compute_weights_cam(model=model, X_data=X_train, dataset=dataset,
                                                    save_weights=True, data_type='training')
 
         #Create Explainer
@@ -57,25 +60,43 @@ def run_confetti_counterfactuals(model_name=None):
                           desc=f"{dataset} ⟶ alphas ({len(alphas)} remaining)",
                           leave=False):
             start = time.time()
-            ces_naive, ces_optimized = ce.parallelized_counterfactual_generator(
-                instances_to_explain=X_samples,
-                reference_data=X_train,
-                reference_weights=training_weights,
-                alpha=alpha,
-                theta=cfg.FIXED_THETA,
-                n_partitions=2,
-                processes=8,
-                verbose=True
-            )
+            if ablation_study:
+                ces_naive, ces_optimized = ce.parallelized_counterfactual_generator(
+                    instances_to_explain=X_samples,
+                    reference_data=X_train,
+                    alpha=alpha,
+                    theta=cfg.FIXED_THETA,
+                    n_partitions=2,
+                    processes=8,
+                    verbose=True,
+                    ablation_study=True
+                )
+            else:
+                ces_naive, ces_optimized = ce.parallelized_counterfactual_generator(
+                    instances_to_explain=X_samples,
+                    reference_data=X_train,
+                    reference_weights=training_weights,
+                    alpha=alpha,
+                    theta=cfg.FIXED_THETA,
+                    n_partitions=2,
+                    processes=8,
+                    verbose=True
+                )
             elapsed = time.time() - start
 
             # Convert Solution arrays to space-separated strings for CSV compatibility
-            ces_naive["Solution"] = ces_naive["Solution"].apply(array_to_string)
+            if ablation_study is False:
+                ces_naive["Solution"] = ces_naive["Solution"].apply(array_to_string)
             ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
 
             # save CFs + timing
-            ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_{model_name}_alpha_{alpha}.csv", index=False)
-            ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_{model_name}_alpha_{alpha}.csv", index=False)
+            if ablation_study is False:
+                ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_{model_name}_alpha_{alpha}.csv", index=False)
+                ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_{model_name}_alpha_{alpha}.csv",
+                                     index=False)
+            else:
+                ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_{model_name}_alpha_{alpha}_ablation_study.csv", index=False)
+
             # save execution time
             pd.DataFrame([{
                 'Dataset': dataset,
@@ -95,25 +116,44 @@ def run_confetti_counterfactuals(model_name=None):
                           desc=f"{dataset} ⟶ thetas ({len(thetas)} remaining)",
                           leave=False):
             start = time.time()
-            ces_naive, ces_optimized  = ce.parallelized_counterfactual_generator(
-                instances_to_explain=X_samples,
-                reference_data=X_train,
-                reference_weights=training_weights,
-                alpha=cfg.FIXED_ALPHA,
-                theta=theta,
-                n_partitions=2,
-                processes=8,
-                verbose=True
-            )
+            if ablation_study:
+                ces_naive, ces_optimized = ce.parallelized_counterfactual_generator(
+                    instances_to_explain=X_samples,
+                    reference_data=X_train,
+                    alpha=cfg.FIXED_ALPHA,
+                    theta=theta,
+                    n_partitions=2,
+                    processes=8,
+                    verbose=True,
+                    ablation_study=True
+                )
+            else:
+                # Use training weights if not in ablation study
+                ces_naive, ces_optimized  = ce.parallelized_counterfactual_generator(
+                    instances_to_explain=X_samples,
+                    reference_data=X_train,
+                    reference_weights=training_weights,
+                    alpha=cfg.FIXED_ALPHA,
+                    theta=theta,
+                    n_partitions=2,
+                    processes=8,
+                    verbose=True
+                )
             elapsed = time.time() - start
 
             # Convert Solution arrays to space-separated strings for CSV compatibility
-            ces_naive["Solution"] = ces_naive["Solution"].apply(array_to_string)
+            if ablation_study is False:
+                ces_naive["Solution"] = ces_naive["Solution"].apply(array_to_string)
             ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
 
             # save CFs + timing
-            ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_{model_name}_theta_{theta}.csv", index=False)
-            ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_{model_name}_theta_{theta}.csv", index=False)
+            if ablation_study is False:
+                ces_naive.to_csv(ce_dir / f"confetti_naive_{dataset}_{model_name}_theta_{theta}.csv", index=False)
+                ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_{model_name}_theta_{theta}.csv",
+                                     index=False)
+            else:
+                ces_optimized.to_csv(ce_dir / f"confetti_optimized_{dataset}_{model_name}_theta_{theta}_ablation_study.csv", index=False)
+
             pd.DataFrame([{
                 'Dataset': dataset,
                 'Alpha': cfg.FIXED_ALPHA,
@@ -127,7 +167,7 @@ def run_confetti_counterfactuals(model_name=None):
                 json.dump(checkpoint, f, indent=2)
 
 def main():
-    run_confetti_counterfactuals(model_name='fcn')
+    run_confetti_counterfactuals(model_name='resnet', ablation_study=True)
 
 if __name__ == "__main__":
     main()

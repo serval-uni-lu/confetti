@@ -1,6 +1,10 @@
+'''
+Script to obtain the average execution time of CONFETTI for each dataset to evaluate how the MTS dimensions
+affect the execution time of the counterfactual generation process.
+'''
+
 import config as cfg
 import keras
-from pathlib import Path
 import warnings
 import confetti.CAM.class_activation_map as cam
 from confetti.explainer.confetti_explainer import CONFETTI

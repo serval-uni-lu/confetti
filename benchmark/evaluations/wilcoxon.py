@@ -146,6 +146,9 @@ def overall_scores():
         'Confetti Optimized (alpha=0.5)': 'Confetti α=0.5',
         'Confetti Optimized (theta=0.95)': 'Confetti θ=0.95',
         'Confetti Optimized (alpha=0.0)': 'Confetti α=0.0',
+        'Ablation Study (alpha=0.5)': 'Ablation Study α=0.5',
+        'Ablation Study (theta=0.95)': 'Ablation Study θ=0.95',
+        'Ablation Study (alpha=0.0)': 'Ablation Study α=0.0',
     }
 
     core_explainers = ['Comte', 'TSEvo', 'Sets']
@@ -209,6 +212,9 @@ def sparsity_ranks():
         'Confetti Optimized (alpha=0.5)': 'Confetti α=0.5',
         'Confetti Optimized (theta=0.95)': 'Confetti θ=0.95',
         'Confetti Optimized (alpha=0.0)': 'Confetti α=0.0',
+        'Ablation Study (alpha=0.5)': 'Ablation Study α=0.5',
+        'Ablation Study (theta=0.95)': 'Ablation Study θ=0.95',
+        'Ablation Study (alpha=0.0)': 'Ablation Study α=0.0',
     }
 
     core_explainers = ['Comte', 'TSEvo', 'Sets']
@@ -252,6 +258,9 @@ def confidence_ranks():
         'Confetti Optimized (alpha=0.5)': 'Confetti α=0.5',
         'Confetti Optimized (theta=0.95)': 'Confetti θ=0.95',
         'Confetti Optimized (alpha=0.0)': 'Confetti α=0.0',
+        'Ablation Study (alpha=0.5)': 'Ablation Study α=0.5',
+        'Ablation Study (theta=0.95)': 'Ablation Study θ=0.95',
+        'Ablation Study (alpha=0.0)': 'Ablation Study α=0.0',
     }
 
     core_explainers = ['Comte', 'TSEvo', 'Sets']

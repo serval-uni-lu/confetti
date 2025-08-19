@@ -292,8 +292,7 @@ class CONFETTI:
         query = self.instances_to_explain[instance_index]
 
         nun = copy.deepcopy(self.reference_data[nun_index])
-        solutions = pd.DataFrame(
-            columns=["Solution", "Window", "Test Instance", "NUN Instance", 'CE Label'])
+        solutions = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance", 'CE Label'])
 
         # Start Optimization Search
         high = subsequence_length
@@ -306,7 +305,10 @@ class CONFETTI:
             if verbose:
                 print(f"Optimization of CE for Instance {instance_index} in Window {window}")
             # Timestep where it starts
-            starting_point = self.findsubarray((self.weights[nun_index]), window)
+            if self.weights is None: #Only happens if ablation_study is True
+                starting_point = 0
+            else:
+                starting_point = self.findsubarray((self.weights[nun_index]), window)
             end_point = starting_point + window
 
             # Define the Counterfactual Problem
@@ -365,7 +367,9 @@ class CONFETTI:
                  maximum_number_of_generations: float = 100,
                  crossover_probability: float = 1.0,
                  mutation_probability: float = 0.9,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 ablation_study:bool = False,
+                 ablation_ts_length: int = 0):
         """
         Execute one full counterfactual generation cycle for a single test instance.
 
@@ -397,6 +401,10 @@ class CONFETTI:
             Probability of applying mutation during reproduction.
         ``verbose`` : bool, default=False
             If True, prints detailed progress logs throughout execution.
+        ``ablation_study`` : bool, default=False
+            If True, skips the naive counterfactual and optimizes for the entire time series.
+        ``ablation_ts_length`` : int, default=0
+            If `ablation_study` is True, this parameter specifies the length of the time series to optimize.
 
         Returns:
         -------
@@ -425,39 +433,60 @@ class CONFETTI:
         else:
             nun = int(nun_result[1][0])
 
-        # Naive Stage
-        naive = self.naive_stage(instance_index=test_instance,
-                                    nun_index=nun,
-                                    model=model,
-                                    theta=theta,
-                                    verbose=verbose)
-        if verbose:
-            print(f'Naive stage finished for instance {test_instance}')
+        if ablation_study:
+            # If ablation study is enabled, skip the naive stage and directly optimize the entire time series
+            if verbose:
+                print(f'Ablation study enabled. Skipping naive stage.')
+                print(f'Optimization stage started for instance {test_instance}')
+                optimized = self.optimization(instance_index=test_instance,
+                                              nun_index=nun,
+                                              subsequence_length=ablation_ts_length,
+                                              model=model,
+                                              alpha=alpha,
+                                              theta=theta,
+                                              n_partitions=n_partitions,
+                                              population_size=population_size,
+                                              maximum_number_of_generations=maximum_number_of_generations,
+                                              crossover_probability=crossover_probability,
+                                              mutation_probability=mutation_probability,
+                                              verbose=verbose)
+                naive = None
+                return nun, naive, optimized
+        else:
+            # Naive Stage
+            naive = self.naive_stage(instance_index=test_instance,
+                                        nun_index=nun,
+                                        model=model,
+                                        theta=theta,
+                                        verbose=verbose)
+            if verbose:
+                print(f'Naive stage finished for instance {test_instance}')
 
-            print(f'Optimization stage started for instance {test_instance}')
+                print(f'Optimization stage started for instance {test_instance}')
 
-        # Optimization
-        optimized = self.optimization(instance_index=test_instance,
-                                      nun_index=nun,
-                                      subsequence_length=naive.iloc[0]["Window"],
-                                      model=model,
-                                      alpha=alpha,
-                                      theta=theta,
-                                      n_partitions=n_partitions,
-                                      population_size=population_size,
-                                      maximum_number_of_generations=maximum_number_of_generations,
-                                      crossover_probability=crossover_probability,
-                                      mutation_probability=mutation_probability,
-                                      verbose=verbose)
+            # Optimization
+            optimized = self.optimization(instance_index=test_instance,
+                                          nun_index=nun,
+                                          subsequence_length=naive.iloc[0]["Window"],
+                                          model=model,
+                                          alpha=alpha,
+                                          theta=theta,
+                                          n_partitions=n_partitions,
+                                          population_size=population_size,
+                                          maximum_number_of_generations=maximum_number_of_generations,
+                                          crossover_probability=crossover_probability,
+                                          mutation_probability=mutation_probability,
+                                          verbose=verbose)
+
+            return nun, naive, optimized
 
 
-
-        return nun, naive, optimized
+        #return nun, naive, optimized
 
     def parallelized_counterfactual_generator(self,
                                               instances_to_explain: np.array,
                                               reference_data: np.array,
-                                              reference_weights: np.array,
+                                              reference_weights: Optional[np.array] = None,
                                               alpha: float = 0.5,
                                               theta: float = 0.51,
                                               n_partitions: int = 12,
@@ -468,7 +497,8 @@ class CONFETTI:
                                               processes: int = 8,
                                               save_counterfactuals: bool = False,
                                               output_path: Optional[str] = None,
-                                              verbose: bool = False):
+                                              verbose: bool = False,
+                                              ablation_study: bool = False):
         """
         Generate counterfactual explanations in parallel for a set of input instances using CONFETTI.
 
@@ -484,10 +514,11 @@ class CONFETTI:
         ``reference_data`` : np.array
             A NumPy array of instances used as the reference set for finding nearest unlike neighbors (NUNs).
             (e.g. the training set of the model). The array should be shaped (number of instances, timesteps, dimensions).
-        ``reference_weights`` : np.array
+        ``reference_weights`` : Optional[np.array]
             A NumPy array containing the class activation map (CAM) weights for each instance in the reference set.
             Each entry highlights the importance of individual time steps in the model’s class prediction.
             Shape: (n_instances, timesteps)
+            Note: It is Optional only if ablation_study is True, otherwise it is required.
         ``alpha`` : float, default=0.5
             Trade-off parameter between sparsity and confidence. The higher the value,
             the more importance is given to achieving a confident prediction.
@@ -512,11 +543,14 @@ class CONFETTI:
             Directory path to save the counterfactuals. If None, a default path is used.
         ``verbose`` : bool, default=False
             If True, print progress and debug information during execution.
+        ``ablation_study`` : bool, default=False
+            If True, skips the naive counterfactual and optimizes for the entire time series.
 
         Returns:
         -------
         pd.DataFrame, pd.DataFrame
             Two DataFrames containing the naive and optimized counterfactuals, respectively.
+                Note: If ablation_study is True, the naive counterfactuals DataFrame will be empty.
             Each DataFrame includes columns for the solution array, window size, sample instance index,
             NUN instance index from reference set , and the predicted class label of the counterfactual.
         """
@@ -539,7 +573,9 @@ class CONFETTI:
                                    maximum_number_of_generations=maximum_number_of_generations,
                                    crossover_probability=crossover_probability,
                                    mutation_probability=mutation_probability,
-                                   verbose=verbose)
+                                   verbose=verbose,
+                                   ablation_study=ablation_study,
+                                   ablation_ts_length=instances_to_explain.shape[1])
 
 
         res = pool.map(wrapped_one_pass, range(len(self.instances_to_explain)))
@@ -564,11 +600,13 @@ class CONFETTI:
             output_directory.mkdir(parents=True, exist_ok=True)
 
             # Convert Solution arrays to space-separated strings for CSV compatibility
-            self.naive_counterfactuals['Solution'] = self.naive_counterfactuals['Solution'].apply(array_to_string)
+            if naive_df is not None:
+                self.naive_counterfactuals['Solution'] = self.naive_counterfactuals['Solution'].apply(array_to_string)
             self.optimized_counterfactuals['Solution'] = self.optimized_counterfactuals['Solution'].apply(array_to_string)
 
             # Save files as csv
-            self.naive_counterfactuals.to_csv(output_directory / f'confetti_naive_counterfactuals.csv', index=False)
+            if naive_df is not None:
+                self.naive_counterfactuals.to_csv(output_directory / f'confetti_naive_counterfactuals.csv', index=False)
             self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv',
                                                   index=False)
             print(f'Counterfactuals saved on {output_directory}')
@@ -729,7 +767,6 @@ class CONFETTI:
         expected_types = {
             "instances_to_explain": np.ndarray,
             "reference_data": np.ndarray,
-            "reference_weights": np.ndarray,
             "alpha": float,
             "theta": float,
             "n_partitions": int,
@@ -753,6 +790,21 @@ class CONFETTI:
                     f"Parameter `{name}` must be of type {expected.__name__}, "
                     f"but got {type(value).__name__}."
                 )
+
+        # Special case: reference_weights can be None only if ablation_study is True
+        reference_weights = arguments.get("reference_weights")
+        ablation_study = arguments.get("ablation_study", False)
+        if reference_weights is None:
+            if not ablation_study:
+                raise CONFETTIConfigurationError(
+                    f"{context + ': ' if context else ''}"
+                    "`reference_weights` must not be None unless `ablation_study=True`."
+                )
+        elif not isinstance(reference_weights, np.ndarray):
+            raise CONFETTIConfigurationError(
+                f"{context + ': ' if context else ''}"
+                f"Parameter `reference_weights` must be of type np.ndarray, but got {type(reference_weights).__name__}."
+            )
 
         output_path = arguments.get("output_path")
         save = arguments.get("save_counterfactuals")
