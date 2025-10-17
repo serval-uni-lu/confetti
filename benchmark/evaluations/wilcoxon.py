@@ -1,10 +1,55 @@
 import numpy as np
 import pandas as pd
 from scipy.stats import wilcoxon
-from statsmodels.stats.multitest import multipletests
+from typing import Optional
+from sklearn.preprocessing import MinMaxScaler
 import config as cfg
 
+#TODO: Delete this file
 
+def debug_three_methods(df, metric, group_col="Dataset", explainer_col="Explainer"):
+    methods_of_interest = ["Confetti α=0.0", "Confetti α=0.5", "Ablation Study α=0.0"]
+
+    wide = (
+        df.loc[df[explainer_col].isin(methods_of_interest),
+               [group_col, explainer_col, metric]]
+          .pivot(index=group_col, columns=explainer_col, values=metric)
+          .dropna()
+          .round(3)
+    )
+
+    print(f"\n=== Per-dataset {metric} values for Confetti α=0.0, Confetti α=0.5, Ablation α=0.0 ===")
+    print(wide)
+
+def normalize_proximity_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize proximity metrics (L1, L2, DTW) to [0,1] within each Dataset.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe containing 'Dataset' and proximity metric columns:
+        - 'Proximity L1'
+        - 'Proximity L2'
+        - 'Proximity DTW'
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of the dataframe with three new normalized columns:
+        - 'Proximity L1_norm'
+        - 'Proximity L2_norm'
+        - 'Proximity DTW_norm'
+    """
+    proximity_cols = ["Proximity L1", "Proximity L2", "Proximity DTW"]
+    data = df.copy()
+
+    for col in proximity_cols:
+        data[col + " Norm"] = (
+            data.groupby("Dataset")[col]
+              .transform(lambda x: MinMaxScaler().fit_transform(x.values.reshape(-1, 1)).flatten())
+        )
+    return data
 
 def significance_ranking(
         df: pd.DataFrame,
@@ -27,13 +72,13 @@ def significance_ranking(
        If none qualify, start a new group.
     3. Return a table: mean_score | rank
     """
-    # Performance ordering
-    mean_scores = (
+    agg_scores = (
         df.groupby(explainer_col)[metric]
-          .mean().round(2)
-          .sort_values(ascending=not higher_better)
+        .agg(["mean", "std"])
+        .round(2)
     )
-    ordered = mean_scores.index.tolist()
+    agg_scores = agg_scores.sort_values("mean", ascending=not higher_better)
+    ordered = agg_scores.index.tolist()
 
     # helper: paired p‑value between two methods
     def p_val(m1, m2):
@@ -43,6 +88,8 @@ def significance_ranking(
                   .dropna()).round(2)
         if wide.empty:
             return np.nan
+
+
         return wilcoxon(wide[m1], wide[m2],
                         alternative="two-sided",
                         method=method_kw).pvalue
@@ -61,14 +108,11 @@ def significance_ranking(
 
     # Assign ranks
     rank_map = {m: r+1 for r, g in enumerate(groups) for m in g}
-    out = pd.DataFrame({
-        explainer_col: mean_scores.index,
-        f"mean_{metric}": mean_scores.values,
-        "rank": [rank_map[m] for m in mean_scores.index]
-    })
+    out = agg_scores.reset_index().rename(
+        columns={"mean": f"mean_{metric}", "std": f"std_{metric}"}
+    )
+    out["rank"] = [rank_map[m] for m in out[explainer_col]]
     return out.sort_values("rank")
-
-
 
 def strict_significance_ranking(df: pd.DataFrame,
                                 alpha: float = 0.05,
@@ -139,8 +183,11 @@ def strict_significance_ranking(df: pd.DataFrame,
                          "rank": list(ranks.values())}).sort_values("rank")
 
 
-def overall_scores():
-    df = pd.read_csv(cfg.EVALUATIONS_FILE)
+def overall_scores(results: Optional[pd.DataFrame] = None, ablation: bool = False):
+    if results:
+        df = results.copy()
+    else:
+        df = pd.read_csv(cfg.EVALUATIONS_FILE)
     # ---- setup ---------------------------------------------------------------
     confetti_method_map = {
         'Confetti Optimized (alpha=0.5)': 'Confetti α=0.5',
@@ -153,35 +200,56 @@ def overall_scores():
 
     core_explainers = ['Comte', 'TSEvo', 'Sets']
 
-    # ---- 1. keep only the rows you want -------------------------------------
-    allowed = core_explainers + list(confetti_method_map.keys())
+    if ablation:
+        confetti_method_map = {
+            'Confetti Optimized (alpha=0.5)': 'Confetti α=0.5',
+            'Confetti Optimized (theta=0.95)': 'Confetti θ=0.95',
+            'Confetti Optimized (alpha=0.0)': 'Confetti α=0.0',
+            'Ablation Study (alpha=0.5)': 'Ablation Study α=0.5',
+            'Ablation Study (theta=0.95)': 'Ablation Study θ=0.95',
+            'Ablation Study (alpha=0.0)': 'Ablation Study α=0.0',
+        }
+        allowed = list(confetti_method_map.keys())
+    else:
+        confetti_method_map = {
+            'Confetti Optimized (alpha=0.5)': 'Confetti α=0.5',
+            'Confetti Optimized (theta=0.95)': 'Confetti θ=0.95',
+            'Confetti Optimized (alpha=0.0)': 'Confetti α=0.0',
+        }
+        allowed = core_explainers + list(confetti_method_map.keys())
     cleaned = df[df['Explainer'].isin(allowed)].copy()
 
-    # ---- 2. rename the Confetti variants ------------------------------------
+
     cleaned['Explainer'] = cleaned['Explainer'].replace(confetti_method_map)
 
-    # ---- 3. drop the now‑irrelevant columns ---------------------------------
+
     cleaned = cleaned.drop(columns=['Param Config', 'Alpha'])
+    cleaned = normalize_proximity_metrics(cleaned)
 
 
     fcn_results = cleaned[cleaned['Model'] == 'fcn']
     resnet_results = cleaned[cleaned['Model'] == 'resnet']
 
+    debug_three_methods(resnet_results, metric="Proximity L2 Norm")
+    debug_three_methods(resnet_results, metric="Proximity L1 Norm")
+    debug_three_methods(resnet_results, metric="Proximity DTW Norm")
+
+    #hb: Higher is Better
     metric_hb_map = {
         "Coverage": True,
         "Validity": True,
         "Sparsity": True,
         "Confidence": True,
         "yNN": True,
-        "Proximity L1": False,
-        "Proximity L2": False,
-        "Proximity DTW": False,
+        "Proximity L1 Norm": False,
+        "Proximity L2 Norm": False,
+        "Proximity DTW Norm": False,
     }
 
     for metric, hb in metric_hb_map.items():
         print(f"\n=== {metric.upper()} ===")
 
-        # ResNet results
+
         table_resnet = significance_ranking(
             resnet_results,
             metric,
@@ -190,7 +258,6 @@ def overall_scores():
             method_kw="exact",
         )
 
-        # FCN results
         table_fcn = significance_ranking(
             fcn_results,
             metric,
@@ -205,8 +272,11 @@ def overall_scores():
         print(f"{metric} Table FCN:")
         print(table_fcn)
 
-def sparsity_ranks():
-    df = pd.read_csv(cfg.EVALUATIONS_FILE)
+def sparsity_ranks(results: Optional[pd.DataFrame] = None, ablation: bool = False):
+    if results:
+        df = results.copy()
+    else:
+        df = pd.read_csv(cfg.EVALUATIONS_FILE)
     # ---- setup ---------------------------------------------------------------
     confetti_method_map = {
         'Confetti Optimized (alpha=0.5)': 'Confetti α=0.5',
@@ -219,14 +289,16 @@ def sparsity_ranks():
 
     core_explainers = ['Comte', 'TSEvo', 'Sets']
 
-    # ---- 1. keep only the rows you want -------------------------------------
-    allowed = core_explainers + list(confetti_method_map.keys())
+    if ablation:
+        allowed = list(confetti_method_map.keys())
+    else:
+        allowed = core_explainers + list(confetti_method_map.keys())
     cleaned = df[df['Explainer'].isin(allowed)].copy()
 
-    # ---- 2. rename the Confetti variants ------------------------------------
+
     cleaned['Explainer'] = cleaned['Explainer'].replace(confetti_method_map)
 
-    # ---- 3. drop the now‑irrelevant columns ---------------------------------
+
     cleaned = cleaned.drop(columns=['Param Config', 'Alpha'])
     # Keep only relevant columns and drop rows without Sparsity
     sparsity_df = cleaned[['Dataset', 'Explainer', 'Sparsity']].dropna(subset=['Sparsity'])
@@ -251,8 +323,11 @@ def sparsity_ranks():
     print("\n=== Sparsity Scores ===")
     print(sparsity_scores)
 
-def confidence_ranks():
-    df = pd.read_csv(cfg.EVALUATIONS_FILE)
+def confidence_ranks(results: Optional[pd.DataFrame] = None, ablation: bool = False):
+    if results:
+        df = results.copy()
+    else:
+        df = pd.read_csv(cfg.EVALUATIONS_FILE)
     # ---- setup ---------------------------------------------------------------
     confetti_method_map = {
         'Confetti Optimized (alpha=0.5)': 'Confetti α=0.5',
@@ -265,8 +340,10 @@ def confidence_ranks():
 
     core_explainers = ['Comte', 'TSEvo', 'Sets']
 
-    # ---- 1. keep only the rows you want -------------------------------------
-    allowed = core_explainers + list(confetti_method_map.keys())
+    if ablation:
+        allowed = list(confetti_method_map.keys())
+    else:
+        allowed = core_explainers + list(confetti_method_map.keys())
     cleaned = df[df['Explainer'].isin(allowed)].copy()
 
     # ---- 2. rename the Confetti variants ------------------------------------
@@ -301,11 +378,92 @@ def confidence_ranks():
     print("\n=== Confidence Scores ===")
     print(confidence_scores)
 
+def time_ranks(results: Optional[pd.DataFrame] = None):
+    if results is not None:
+        exec_times = results.copy()
+    else:
+        exec_times_resnet = pd.read_csv(cfg.RESULTS_DIR / "execution_times_confetti_resnet.csv")
+        exec_times_resnet["Model"] = "resnet"
+
+        exec_times_fcn = pd.read_csv(cfg.RESULTS_DIR / "execution_times_confetti_fcn.csv")
+        exec_times_fcn["Model"] = "fcn"
+
+        exec_times_resnet_abl = pd.read_csv(cfg.RESULTS_DIR / "execution_times_confetti_resnet_ablation_study.csv")
+        exec_times_resnet_abl["Model"] = "Ablation ResNet"
+
+        exec_times_fcn_abl = pd.read_csv(cfg.RESULTS_DIR / "execution_times_confetti_fcn_ablation_study.csv")
+        exec_times_fcn_abl["Model"] = "Ablation FCN"
+
+        exec_times = pd.concat(
+            [exec_times_resnet, exec_times_fcn, exec_times_resnet_abl, exec_times_fcn_abl],
+            ignore_index=True
+        )
+
+        exec_times["Config"] = exec_times.apply(lambda row: f"α={row.Alpha}, θ={row.Theta}", axis=1)
+
+    # --- Collect results for ResNet vs Ablation ResNet ---
+    resnet_results = []
+    for dataset in exec_times["Dataset"].unique():
+        subset = exec_times[(exec_times["Dataset"] == dataset) &
+                            (exec_times["Model"].isin(["ResNet", "Ablation ResNet"]))]
+
+        if subset.empty:
+            continue
+
+        res = significance_ranking(
+            df=subset,
+            metric="Execution Time",
+            higher_better=False,
+            alpha=0.05,
+            method_kw="exact",
+            group_col="Config",
+            explainer_col="Model"
+        )
+        res.insert(0, "Dataset", dataset)
+        resnet_results.append(res)
+
+    resnet_results = pd.concat(resnet_results, ignore_index=True)
+
+    # --- Collect results for FCN vs Ablation FCN ---
+    fcn_results = []
+    for dataset in exec_times["Dataset"].unique():
+        subset = exec_times[(exec_times["Dataset"] == dataset) &
+                            (exec_times["Model"].isin(["FCN", "Ablation FCN"]))]
+
+        if subset.empty:
+            continue
+
+        res = significance_ranking(
+            df=subset,
+            metric="Execution Time",
+            higher_better=False,
+            alpha=0.05,
+            method_kw="exact",
+            group_col="Config",
+            explainer_col="Model"
+        )
+        res.insert(0, "Dataset", dataset)
+        fcn_results.append(res)
+
+    fcn_results = pd.concat(fcn_results, ignore_index=True)
+
+    # --- Print tables ---
+    print("\n=== ResNet vs Ablation ResNet ===")
+    print(resnet_results)
+
+    print("\n=== FCN vs Ablation FCN ===")
+    print(fcn_results)
+
+    return resnet_results, fcn_results
+
+
 
 def main():
-    overall_scores()
-    sparsity_ranks()
-    confidence_ranks()
+    overall_scores(ablation=True)
+    sparsity_ranks(ablation=True)
+    confidence_ranks(ablation=True)
+    time_ranks()
+
 
 if __name__ == '__main__':
     main()

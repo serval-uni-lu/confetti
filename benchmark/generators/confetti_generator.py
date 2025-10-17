@@ -26,6 +26,8 @@ def run_confetti_counterfactuals(model_name=None, ablation_study=False):
         cp_path.parent.mkdir(parents=True, exist_ok=True)
         with open(cp_path, "w") as f:
             json.dump(checkpoint, f, indent=2)
+
+    # Create the execution time file
     if ablation_study:
         time_file = cfg.RESULTS_DIR / f"execution_times_confetti_{model_name}_ablation_study.csv"
     else:
@@ -34,6 +36,8 @@ def run_confetti_counterfactuals(model_name=None, ablation_study=False):
         pd.DataFrame(columns=['Dataset', 'Alpha', 'Theta', 'Execution Time']) \
             .to_csv(time_file, index=False)
 
+
+    # Run the experiment
     for dataset, params in checkpoint.items():
         ce_dir = cfg.RESULTS_DIR / dataset
         ce_dir.mkdir(parents=True, exist_ok=True)
@@ -110,7 +114,7 @@ def run_confetti_counterfactuals(model_name=None, ablation_study=False):
             with open(cp_path, "w") as f:
                 json.dump(checkpoint, f, indent=2)
 
-        # — Experiment 2: remaining thetas —
+        # — Experiment 2: Thetas —
         thetas = params.get('thetas', [])
         for theta in tqdm(thetas.copy(),
                           desc=f"{dataset} ⟶ thetas ({len(thetas)} remaining)",

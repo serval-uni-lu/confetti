@@ -10,6 +10,8 @@ CAM_WEIGHTS_DIR = TRAINED_MODELS_DIR
 RESULTS_DIR = BASE_DIR / "results"
 DATA_DIR = BASE_DIR / "benchmark" / "data"
 EVALUATIONS_FILE = BASE_DIR / "benchmark" / "evaluations" / "all_evaluation_results.csv"
+EXPERIMENT_PROXIMITY_METRIC = BASE_DIR / "benchmark" / "experiments" / "proximity_metric_results"
+EXPERIMENT_OBJECTIVES = BASE_DIR / "benchmark" / "experiments" / "objectives_results"
 
 NUMBER_OF_SAMPLES_PER_CLASS = {
     'ArticularyWordRecognition': 1,

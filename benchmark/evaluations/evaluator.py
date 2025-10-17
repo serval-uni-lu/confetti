@@ -1,13 +1,14 @@
-from typing import Sequence, Iterable
+from typing import Sequence, Iterable, Optional, Tuple
 import pandas as pd
 import numpy as np
 from tslearn.metrics import dtw
 from tslearn.neighbors import KNeighborsTimeSeries
-
+from sklearn.preprocessing import MinMaxScaler
 from confetti.explainer.utils import load_data, convert_string_to_array, load_multivariate_ts_from_csv
 import keras
 import config as cfg
 import tensorflow as tf
+from pathlib import Path
 tf.keras.utils.disable_interactive_logging()
 
 
@@ -22,7 +23,13 @@ class Evaluator:
         Initializes the Evaluator object
         """
 
-    def evaluate_from_csv(self, explainer:str, dataset: str, model_name:str, alpha: bool=True, param_config: float=0.0):
+    def evaluate_from_csv(self, explainer:str,
+                          dataset: str,
+                          model_name:str,
+                          alpha: bool=True,
+                          param_config: float=0.0,
+                          optional_path: Optional[Path] = None,
+                          proximity_experiment: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Evaluates the counterfactual explanations for a given dataset.
 
@@ -50,7 +57,7 @@ class Evaluator:
         model = self.__get_model(dataset, model_name)
 
         # Get Counterfactuals
-        counterfactuals = self.__get_counterfactuals(explainer, dataset, model_name, alpha, param_config)
+        counterfactuals = self.__get_counterfactuals(explainer, dataset, model_name, alpha, param_config, optional_path)
         counterfactuals['Solution'] = counterfactuals['Solution'].apply(lambda x: convert_string_to_array(x,
                                                                                                           timesteps=timesteps,
                                                                                                           channels=channels))
@@ -67,7 +74,25 @@ class Evaluator:
             # Append missing rows to the counterfactuals DataFrame
             counterfactuals = pd.concat([counterfactuals, missing_instances], ignore_index=True)
 
+        if proximity_experiment:
+            naive_path = optional_path.with_name(optional_path.name.replace("_optimized.csv", "_naive.csv"))
+            naive_counterfactuals = self.__get_counterfactuals('Naive',
+                                                               dataset,
+                                                               model_name,
+                                                               alpha,
+                                                               param_config,
+                                                               optional_path=naive_path)
+            naive_counterfactuals['Solution'] = naive_counterfactuals['Solution'].apply(
+                lambda x: convert_string_to_array(x,
+                                                  timesteps=timesteps,
+                                                  channels=channels))
 
+            missing_instances = naive_counterfactuals[
+                ~naive_counterfactuals['Test Instance'].isin(counterfactuals['Test Instance'])
+            ]
+
+            # Append missing rows to the counterfactuals DataFrame
+            counterfactuals = pd.concat([counterfactuals, missing_instances], ignore_index=True)
 
         #Get the labels of the original instance *when evaluated by the model*
         og_labels = np.argmax(model.predict(X_sample),axis=1)
@@ -313,6 +338,7 @@ class Evaluator:
             model: str,
             alpha: bool,
             param_config: float,
+            optional_path: Optional[Path] = None,
     ):
         """
         Loads counterfactuals. Supported 'explainer' values:
@@ -345,8 +371,11 @@ class Evaluator:
             raise FileNotFoundError(f"Could not find any of: {tried}")
 
         # Non-confetti explainers
-        fname = f"{explainer}_{dataset}_{model}_counterfactuals.csv"
-        return pd.read_csv(dirpath / fname)
+        if optional_path is None:
+            fname = f"{explainer}_{dataset}_{model}_counterfactuals.csv"
+            return pd.read_csv(dirpath / fname)
+        else:
+            return pd.read_csv(optional_path)
 
     def __get_coverage(self, sample: np.ndarray, counterfactuals: pd.DataFrame) -> float:
         """
@@ -380,7 +409,6 @@ class Evaluator:
         if original.shape != counterfactual.shape:
             raise ValueError("Original and counterfactual must have the same shape.")
         return np.mean(original.flatten() == counterfactual.flatten())
-
 
     def __get_confidence(self, model, counterfactual, timesteps, channels, original_label):
         """

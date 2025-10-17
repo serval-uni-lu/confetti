@@ -11,6 +11,7 @@ import tensorflow as tf
 tf.keras.utils.disable_interactive_logging()
 
 from tslearn.neighbors import KNeighborsTimeSeries
+from tslearn.metrics import TSLEARN_VALID_METRICS
 
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.optimize import minimize
@@ -84,6 +85,7 @@ class CONFETTI:
                                  query: np.array,
                                  predicted_label: int,
                                  distance: str = "euclidean",
+                                 dtw_window: Optional[int] = None,
                                  n_neighbors: int = 1,
                                  theta: float = 0.51
                                  ) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
@@ -130,7 +132,12 @@ class CONFETTI:
         X_unlike = self.reference_data[list(unlike_indices)]
 
         # Fit KNN on unlike instances
-        knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance)
+        metric_params = None
+        if distance == "dtw":
+            if dtw_window is not None:
+                metric_params = {"global_constraint": "sakoe_chiba",
+                                 'sakoe_chiba_radius': dtw_window}
+        knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance, metric_params=metric_params)
         knn.fit(X_unlike)
 
         # Get nearest neighbors
@@ -243,6 +250,11 @@ class CONFETTI:
                      maximum_number_of_generations: float = 100,
                      crossover_probability: float = 1.0,
                      mutation_probability: float = 0.9,
+                     optimize_confidence: bool = True,
+                     optimize_sparsity: bool = True,
+                     optimize_proximity: bool = False,
+                     proximity_distance: str = "euclidean",
+                     dtw_window: Optional[int] = None,
                      verbose: bool = False) -> pd.DataFrame:
         """
         Perform counterfactual optimization for a single instance.
@@ -266,6 +278,7 @@ class CONFETTI:
         ``alpha`` : float, default=0.5
             Weighting parameter between confidence and sparsity in the objective function.
             The higher the value, the more weight is given to confidence.
+            It is not used if `optimize_confidence` or `optimize_sparsity` is False.
         ``theta`` : float, default=0.51
             Confidence threshold for the target class predicted probability (predicted probability ≥ theta).
         ``n_partitions`` : int, default=12
@@ -278,6 +291,17 @@ class CONFETTI:
             Probability of applying crossover during reproduction.
         ``mutation_probability`` : float, default=0.9
             Probability of applying mutation during reproduction.
+        ``optimize_confidence`` : bool, default=True
+            If True, the optimization will add the objective of achieving a confident prediction for the target class.
+        ``optimize_sparsity`` : bool, default=True
+            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
+        ``optimize_proximity`` : bool, default=False
+            If True, the optimization will add the objective of minimizing the distance to the original instance.
+        ``proximity_distance`` : str, default="euclidean"
+            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
+            Options are all supported metrics by `tslearn.metrics`.
+        ``dtw_window`` : Optional[int], default=None
+            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
         ``verbose`` : bool, default=False
             If True, print intermediate progress and diagnostic information.
 
@@ -287,6 +311,12 @@ class CONFETTI:
             DataFrame containing the optimized counterfactual solutions, including the solution array,
             window size, test instance index, NUN instance index, and the predicted class label of the counterfactual.
         """
+
+        #Validate that there are at least two objectives to optimize
+        number_of_objectives = int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
+        if number_of_objectives < 2:
+            raise CONFETTIConfigurationError("At least two objectives must be optimized. "
+                                             "Set `optimize_confidence`, `optimize_sparsity`, or `optimize_proximity` to True.")
 
         # Initialize Values
         query = self.instances_to_explain[instance_index]
@@ -312,12 +342,24 @@ class CONFETTI:
             end_point = starting_point + window
 
             # Define the Counterfactual Problem
-            problem = CounterfactualProblem(query, nun, nun_index, starting_point, window, model,
-                                            self.reference_labels, alpha, theta)
+            problem = CounterfactualProblem(original_instance=query,
+                                            nun_instance=nun,
+                                            nun_index=nun_index,
+                                            start_timestep=starting_point,
+                                            subsequence_length=window,
+                                            classifier=model,
+                                            reference_labels=self.reference_labels,
+                                            optimize_confidence=optimize_confidence,
+                                            optimize_sparsity=optimize_sparsity,
+                                            optimize_proximity=optimize_proximity,
+                                            proximity_distance=proximity_distance,
+                                            dtw_window=dtw_window,
+                                            alpha=alpha,
+                                            theta=theta)
 
             # create the reference directions to be used for the optimization in NSGA3
             ref_dirs = get_reference_directions("das-dennis",
-                                                n_dim=2,
+                                                n_dim=number_of_objectives,
                                                 n_partitions=n_partitions)
 
             # NSGA-III Algorithm
@@ -367,6 +409,11 @@ class CONFETTI:
                  maximum_number_of_generations: float = 100,
                  crossover_probability: float = 1.0,
                  mutation_probability: float = 0.9,
+                 optimize_confidence: bool = True,
+                 optimize_sparsity: bool = True,
+                 optimize_proximity: bool = False,
+                 proximity_distance: str = "euclidean",
+                 dtw_window: Optional[int] = None,
                  verbose: bool = False,
                  ablation_study:bool = False,
                  ablation_ts_length: int = 0):
@@ -399,6 +446,16 @@ class CONFETTI:
             Probability of applying crossover during reproduction.
         ``mutation_probability`` : float, default=0.9
             Probability of applying mutation during reproduction.
+        ``optimize_confidence`` : bool, default=True
+            If True, the optimization will add the objective of achieving a confident prediction for the target class.
+        ``optimize_sparsity`` : bool, default=True
+            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
+        ``optimize_proximity`` : bool, default=False
+            If True, the optimization will add the objective of minimizing the distance to the original instance.
+        ``proximity_distance`` : str, default="euclidean"
+            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
+        ``dtw_window`` : Optional[int], default=None
+            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
         ``verbose`` : bool, default=False
             If True, prints detailed progress logs throughout execution.
         ``ablation_study`` : bool, default=False
@@ -423,7 +480,7 @@ class CONFETTI:
         # Find the Nearest Unlike Neighbour
         nun_result = self.nearest_unlike_neighbour(query=self.instances_to_explain[test_instance],
                                             predicted_label=self.original_labels[test_instance],
-                                            distance= 'euclidean',
+                                            distance=proximity_distance,
                                             n_neighbors=1,
                                             theta=theta)
         if nun_result[0] is None:
@@ -449,6 +506,11 @@ class CONFETTI:
                                               maximum_number_of_generations=maximum_number_of_generations,
                                               crossover_probability=crossover_probability,
                                               mutation_probability=mutation_probability,
+                                              optimize_confidence=optimize_confidence,
+                                              optimize_sparsity=optimize_sparsity,
+                                              optimize_proximity=optimize_proximity,
+                                              proximity_distance=proximity_distance,
+                                              dtw_window=dtw_window,
                                               verbose=verbose)
                 naive = None
                 return nun, naive, optimized
@@ -476,6 +538,11 @@ class CONFETTI:
                                           maximum_number_of_generations=maximum_number_of_generations,
                                           crossover_probability=crossover_probability,
                                           mutation_probability=mutation_probability,
+                                          optimize_confidence=optimize_confidence,
+                                          optimize_sparsity=optimize_sparsity,
+                                          optimize_proximity=optimize_proximity,
+                                          proximity_distance=proximity_distance,
+                                          dtw_window=dtw_window,
                                           verbose=verbose)
 
             return nun, naive, optimized
@@ -494,6 +561,11 @@ class CONFETTI:
                                               maximum_number_of_generations: int = 100,
                                               crossover_probability: float = 1.0,
                                               mutation_probability: float = 0.9,
+                                              optimize_confidence: bool = True,
+                                              optimize_sparsity: bool = True,
+                                              optimize_proximity: bool = False,
+                                              proximity_distance: str = "euclidean",
+                                              dtw_window: Optional[int] = None,
                                               processes: int = 8,
                                               save_counterfactuals: bool = False,
                                               output_path: Optional[str] = None,
@@ -522,6 +594,7 @@ class CONFETTI:
         ``alpha`` : float, default=0.5
             Trade-off parameter between sparsity and confidence. The higher the value,
             the more importance is given to achieving a confident prediction.
+            It is not used when `optimize_confidence` or `optimize_sparsity` is False.
         ``theta`` : float, default=0.51
             Confidence threshold for selecting valid counterfactuals
             (i.e., predicted class probability must be ≥ theta).
@@ -535,6 +608,16 @@ class CONFETTI:
             Probability of applying crossover during reproduction.
         ``mutation_probability`` : float, default=0.9
             Probability of applying mutation during reproduction.
+        ``optimize_confidence`` : bool, default=True
+            If True, the optimization will add the objective of achieving a confident prediction for the target class.
+        ``optimize_sparsity`` : bool, default=True
+            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
+        ``optimize_proximity`` : bool, default=False
+            If True, the optimization will add the objective of minimizing the distance to the original instance.
+        ``proximity_distance`` : str, default="euclidean"
+            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
+        ``dtw_window`` : Optional[int], default=None
+            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
         ``processes`` : int, default=8
             Number of parallel processes to spawn.
         ``save_counterfactuals`` : bool, default=False
@@ -573,6 +656,11 @@ class CONFETTI:
                                    maximum_number_of_generations=maximum_number_of_generations,
                                    crossover_probability=crossover_probability,
                                    mutation_probability=mutation_probability,
+                                   optimize_confidence=optimize_confidence,
+                                   optimize_sparsity=optimize_sparsity,
+                                   optimize_proximity=optimize_proximity,
+                                   proximity_distance=proximity_distance,
+                                   dtw_window=dtw_window,
                                    verbose=verbose,
                                    ablation_study=ablation_study,
                                    ablation_ts_length=instances_to_explain.shape[1])
@@ -623,6 +711,11 @@ class CONFETTI:
                                  maximum_number_of_generations: int = 100,
                                  crossover_probability: float = 1.0,
                                  mutation_probability: float = 0.9,
+                                 optimize_confidence: bool = True,
+                                 optimize_sparsity: bool = True,
+                                 optimize_proximity: bool = False,
+                                 proximity_distance: str = "euclidean",
+                                 dtw_window: Optional[int] = None,
                                  save_counterfactuals: bool = False,
                                  output_path: Optional[str] = None,
                                  verbose: bool = False):
@@ -659,6 +752,16 @@ class CONFETTI:
             Probability of applying crossover during reproduction.
         ``mutation_probability`` : float, default=0.9
             Probability of applying mutation during reproduction.
+        ``optimize_confidence`` : bool, default=True
+            If True, the optimization will add the objective of achieving a confident prediction for the target class.
+        ``optimize_sparsity`` : bool, default=True
+            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
+        ``optimize_proximity`` : bool, default=False
+            If True, the optimization will add the objective of minimizing the distance to the original instance.
+        ``proximity_distance`` : str, default="euclidean"
+            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
+        ``dtw_window`` : Optional[int], default=None
+            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
         ``save_counterfactuals`` : bool, default=False
             Whether to save the generated counterfactuals to disk.
         ``output_path`` : Optional[str], optional
@@ -671,6 +774,7 @@ class CONFETTI:
         None
             Results are optionally saved to disk and/or stored internally for further use.
         """
+
         self.__validate_types(locals(), context= "counterfactual_generator")
         self.instances_to_explain = instances_to_explain
         self.original_labels = np.argmax(self.model.predict(self.instances_to_explain, verbose=0), axis=1)
@@ -683,7 +787,7 @@ class CONFETTI:
         for instance in range(len(instances_to_explain)):
             result = self.nearest_unlike_neighbour(query=self.instances_to_explain[instance],
                                                    predicted_label=self.original_labels[instance],
-                                                   distance='euclidean',
+                                                   distance=proximity_distance,
                                                    n_neighbors=1,
                                                    theta=theta)
             if result is not None and result[1] is not None and len(result[1]) > 0:
@@ -731,6 +835,11 @@ class CONFETTI:
                                         maximum_number_of_generations=maximum_number_of_generations,
                                         crossover_probability=crossover_probability,
                                         mutation_probability=mutation_probability,
+                                        optimize_confidence=optimize_confidence,
+                                        optimize_sparsity=optimize_sparsity,
+                                        optimize_proximity=optimize_proximity,
+                                        proximity_distance=proximity_distance,
+                                        dtw_window=dtw_window,
                                         verbose=verbose)
             if opt_df is not None:
                 self.optimized_counterfactuals = pd.concat(
@@ -774,6 +883,11 @@ class CONFETTI:
             "maximum_number_of_generations": int,
             "crossover_probability": float,
             "mutation_probability": float,
+            "optimize_confidence": bool,
+            "optimize_sparsity": bool,
+            "optimize_proximity": bool,
+            "proximity_distance": str,
+            "dtw_window": (int, type(None)),
             "save_counterfactuals": bool,
             "verbose": bool,
         }
