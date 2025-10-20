@@ -3,8 +3,13 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from evaluator import Evaluator
 
 DATASETS = [
-    'ArticularyWordRecognition', 'BasicMotions', 'Epilepsy',
-    'ERing', 'Libras', 'NATOPS', 'RacketSports'
+    "ArticularyWordRecognition",
+    "BasicMotions",
+    "Epilepsy",
+    "ERing",
+    "Libras",
+    "NATOPS",
+    "RacketSports",
 ]
 CONFETTI_ALPHA = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
 CONFETTI_THETA = [0.55, 0.65, 0.75, 0.85, 0.95]
@@ -13,7 +18,8 @@ EXPLAINERS = [
     ("sets", "Sets"),
     ("tsevo", "TSEvo"),
 ]
-MODELS = ['fcn', 'resnet']
+MODELS = ["fcn", "resnet"]
+
 
 def eval_config(args):
     """Parallel evaluation function. Skips if CSV not found."""
@@ -25,9 +31,10 @@ def eval_config(args):
         summary["Model"] = model
         return summary
     except FileNotFoundError:
-        print(f"File not found for {display_name} - {dataset} - {model} - {extra_kwargs}. Skipping.")
+        print(
+            f"File not found for {display_name} - {dataset} - {model} - {extra_kwargs}. Skipping."
+        )
         return None
-
 
 
 def evaluate_results_parallel():
@@ -39,27 +46,51 @@ def evaluate_results_parallel():
                 configs.append((explainer, dataset, model, display_name, {}))
 
     # Confetti standard runs
-    for confetti in ['confetti_naive', 'confetti_optimized']:
+    for confetti in ["confetti_naive", "confetti_optimized"]:
         for dataset in DATASETS:
             for model in MODELS:
                 for alpha in CONFETTI_ALPHA:
                     extra_kwargs = {"alpha": True, "param_config": alpha}
-                    display_name = f"{confetti.replace('_', ' ').title()} (alpha={alpha})"
-                    configs.append((confetti, dataset, model, display_name, extra_kwargs))
+                    display_name = (
+                        f"{confetti.replace('_', ' ').title()} (alpha={alpha})"
+                    )
+                    configs.append(
+                        (confetti, dataset, model, display_name, extra_kwargs)
+                    )
                 for theta in CONFETTI_THETA:
                     extra_kwargs = {"alpha": False, "param_config": theta}
-                    display_name = f"{confetti.replace('_', ' ').title()} (theta={theta})"
-                    configs.append((confetti, dataset, model, display_name, extra_kwargs))
+                    display_name = (
+                        f"{confetti.replace('_', ' ').title()} (theta={theta})"
+                    )
+                    configs.append(
+                        (confetti, dataset, model, display_name, extra_kwargs)
+                    )
 
     # Ablation Study as a separate explainer
     for dataset in DATASETS:
         for model in MODELS:
             for alpha in CONFETTI_ALPHA:
                 extra_kwargs = {"alpha": True, "param_config": alpha}
-                configs.append(("ablation_study", dataset, model, f"Ablation Study (alpha={alpha})", extra_kwargs))
+                configs.append(
+                    (
+                        "ablation_study",
+                        dataset,
+                        model,
+                        f"Ablation Study (alpha={alpha})",
+                        extra_kwargs,
+                    )
+                )
             for theta in CONFETTI_THETA:
                 extra_kwargs = {"alpha": False, "param_config": theta}
-                configs.append(("ablation_study", dataset, model, f"Ablation Study (theta={theta})", extra_kwargs))
+                configs.append(
+                    (
+                        "ablation_study",
+                        dataset,
+                        model,
+                        f"Ablation Study (theta={theta})",
+                        extra_kwargs,
+                    )
+                )
 
     summaries = []
     with ProcessPoolExecutor() as executor:
@@ -79,6 +110,7 @@ def evaluate_results_parallel():
 
 def main():
     evaluate_results_parallel()
+
 
 if __name__ == "__main__":
     main()

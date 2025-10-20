@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import keras
 import tensorflow as tf
+
 tf.keras.utils.disable_interactive_logging()
 
 from tslearn.neighbors import KNeighborsTimeSeries
@@ -30,15 +31,17 @@ from .errors import CONFETTIConfigurationError
 
 
 class CONFETTI:
-    def __init__(self, model_path:str = None):
+    def __init__(self, model_path: str = None):
         """
         Initialize the CONFETTI explainer with the model and data.
         Args:
             model_path: Path to the trained model
         """
         if model_path is None or not isinstance(model_path, str):
-            raise CONFETTIConfigurationError(f"model_path must be a valid string path to the trained model, "
-                                             f"but got {type(model_path).__name__} instead.")
+            raise CONFETTIConfigurationError(
+                f"model_path must be a valid string path to the trained model, "
+                f"but got {type(model_path).__name__} instead."
+            )
 
         self.model_path = model_path
         self.model = keras.models.load_model(model_path)
@@ -72,7 +75,7 @@ class CONFETTI:
             Starting index of the contiguous subsequence of length `k` with the highest total weight.
         """
         start = 0
-        max_sum = curr_sum = sum(w[start:start + k])
+        max_sum = curr_sum = sum(w[start : start + k])
         for i in range(1, len(w) - k + 1):
             curr_sum -= w[i - 1]
             curr_sum += w[i + k - 1]
@@ -81,14 +84,15 @@ class CONFETTI:
                 start = i
         return start
 
-    def nearest_unlike_neighbour(self,
-                                 query: np.array,
-                                 predicted_label: int,
-                                 distance: str = "euclidean",
-                                 dtw_window: Optional[int] = None,
-                                 n_neighbors: int = 1,
-                                 theta: float = 0.51
-                                 ) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    def nearest_unlike_neighbour(
+        self,
+        query: np.array,
+        predicted_label: int,
+        distance: str = "euclidean",
+        dtw_window: Optional[int] = None,
+        n_neighbors: int = 1,
+        theta: float = 0.51,
+    ) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         """
         Find the Nearest Unlike Neighbour (NUN) of a given instance based on a distance metric
         and a minimum confidence constraint.
@@ -123,11 +127,11 @@ class CONFETTI:
         """
 
         # Label DataFrame
-        df = pd.DataFrame(self.reference_labels, columns=['label'])
-        df.index.name = 'index'
+        df = pd.DataFrame(self.reference_labels, columns=["label"])
+        df.index.name = "index"
 
         # Only keep unlike-labels
-        unlike_mask = df['label'] != predicted_label
+        unlike_mask = df["label"] != predicted_label
         unlike_indices = df[unlike_mask].index
         X_unlike = self.reference_data[list(unlike_indices)]
 
@@ -135,13 +139,19 @@ class CONFETTI:
         metric_params = None
         if distance == "dtw":
             if dtw_window is not None:
-                metric_params = {"global_constraint": "sakoe_chiba",
-                                 'sakoe_chiba_radius': dtw_window}
-        knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance, metric_params=metric_params)
+                metric_params = {
+                    "global_constraint": "sakoe_chiba",
+                    "sakoe_chiba_radius": dtw_window,
+                }
+        knn = KNeighborsTimeSeries(
+            n_neighbors=n_neighbors, metric=distance, metric_params=metric_params
+        )
         knn.fit(X_unlike)
 
         # Get nearest neighbors
-        dist, ind = knn.kneighbors(query.reshape(1, query.shape[0], query.shape[1]), return_distance=True)
+        dist, ind = knn.kneighbors(
+            query.reshape(1, query.shape[0], query.shape[1]), return_distance=True
+        )
         actual_indices = unlike_indices[ind[0]]
         candidate_X = self.reference_data[actual_indices]
 
@@ -162,13 +172,15 @@ class CONFETTI:
 
         return final_distances, final_indices
 
-    def naive_stage(self,
-                       instance_index: int,
-                       nun_index: int,
-                       model,
-                       subarray_length: int = 1,
-                       theta: float = 0.51,
-                       verbose: bool = False) -> pd.DataFrame:
+    def naive_stage(
+        self,
+        instance_index: int,
+        nun_index: int,
+        model,
+        subarray_length: int = 1,
+        theta: float = 0.51,
+        verbose: bool = False,
+    ) -> pd.DataFrame:
         """
         Generate a naive counterfactual by replacing a subsequence of the original instance
         with the corresponding subsequence from its nearest unlike neighbor (NUN).
@@ -201,61 +213,103 @@ class CONFETTI:
 
         # Initialize values
         if verbose:
-            print(f'Naive stage started for instance {instance_index}')
+            print(f"Naive stage started for instance {instance_index}")
 
         starting_point = self.findsubarray(w=self.weights[nun_index], k=subarray_length)
 
-        counterfactual = np.concatenate((self.instances_to_explain[instance_index][:starting_point],
-                                         (self.reference_data[nun_index][starting_point:subarray_length + starting_point]),
-                                         self.instances_to_explain[instance_index][subarray_length + starting_point:]))
+        counterfactual = np.concatenate(
+            (
+                self.instances_to_explain[instance_index][:starting_point],
+                (
+                    self.reference_data[nun_index][
+                        starting_point : subarray_length + starting_point
+                    ]
+                ),
+                self.instances_to_explain[instance_index][
+                    subarray_length + starting_point :
+                ],
+            )
+        )
 
-        #Obtain prediction probability of target class
-        prob_target = model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]), verbose=0)[0][
-            self.reference_labels[nun_index]]
+        # Obtain prediction probability of target class
+        prob_target = model.predict(
+            counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]),
+            verbose=0,
+        )[0][self.reference_labels[nun_index]]
 
         while prob_target <= theta:
             subarray_length += 1
             # Timestep where it starts
-            starting_point = self.findsubarray(w=self.weights[nun_index], k=subarray_length)
+            starting_point = self.findsubarray(
+                w=self.weights[nun_index], k=subarray_length
+            )
 
             # Create the counterfactual by swapping the original instance's values for the NUN's.
-            counterfactual = np.concatenate((self.instances_to_explain[instance_index][:starting_point],
-                                             (self.reference_data[nun_index][starting_point:subarray_length + starting_point]),
-                                             self.instances_to_explain[instance_index][subarray_length + starting_point:]))
+            counterfactual = np.concatenate(
+                (
+                    self.instances_to_explain[instance_index][:starting_point],
+                    (
+                        self.reference_data[nun_index][
+                            starting_point : subarray_length + starting_point
+                        ]
+                    ),
+                    self.instances_to_explain[instance_index][
+                        subarray_length + starting_point :
+                    ],
+                )
+            )
 
             # Feed new instance to model and check if the probability target changed.
-            counterfactual_reshaped = counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1])
-            prob_target = model.predict(counterfactual_reshaped,verbose=0)[0][self.reference_labels[nun_index]]
+            counterfactual_reshaped = counterfactual.reshape(
+                1, counterfactual.shape[0], counterfactual.shape[1]
+            )
+            prob_target = model.predict(counterfactual_reshaped, verbose=0)[0][
+                self.reference_labels[nun_index]
+            ]
 
-        ce_label = np.argmax(model.predict(counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]),
-                                           verbose=0), axis=1)
+        ce_label = np.argmax(
+            model.predict(
+                counterfactual.reshape(
+                    1, counterfactual.shape[0], counterfactual.shape[1]
+                ),
+                verbose=0,
+            ),
+            axis=1,
+        )
 
         if verbose:
-            print(f'Naive stage finished for instance {instance_index}')
+            print(f"Naive stage finished for instance {instance_index}")
 
-        counterfactual_dict = {'Solution': [counterfactual], 'Window': subarray_length,
-                               'Test Instance': instance_index, 'NUN Instance': nun_index, 'CE Label': ce_label[0],}
+        counterfactual_dict = {
+            "Solution": [counterfactual],
+            "Window": subarray_length,
+            "Test Instance": instance_index,
+            "NUN Instance": nun_index,
+            "CE Label": ce_label[0],
+        }
         counterfactual_df = pd.DataFrame(counterfactual_dict)
         return counterfactual_df
 
-    def optimization(self,
-                     instance_index: int,
-                     nun_index: int,
-                     subsequence_length: int,
-                     model,
-                     alpha: float = 0.5,
-                     theta: float = 0.51,
-                     n_partitions: int = 12,
-                     population_size: int = 100,
-                     maximum_number_of_generations: float = 100,
-                     crossover_probability: float = 1.0,
-                     mutation_probability: float = 0.9,
-                     optimize_confidence: bool = True,
-                     optimize_sparsity: bool = True,
-                     optimize_proximity: bool = False,
-                     proximity_distance: str = "euclidean",
-                     dtw_window: Optional[int] = None,
-                     verbose: bool = False) -> pd.DataFrame:
+    def optimization(
+        self,
+        instance_index: int,
+        nun_index: int,
+        subsequence_length: int,
+        model,
+        alpha: float = 0.5,
+        theta: float = 0.51,
+        n_partitions: int = 12,
+        population_size: int = 100,
+        maximum_number_of_generations: float = 100,
+        crossover_probability: float = 1.0,
+        mutation_probability: float = 0.9,
+        optimize_confidence: bool = True,
+        optimize_sparsity: bool = True,
+        optimize_proximity: bool = False,
+        proximity_distance: str = "euclidean",
+        dtw_window: Optional[int] = None,
+        verbose: bool = False,
+    ) -> pd.DataFrame:
         """
         Perform counterfactual optimization for a single instance.
 
@@ -312,17 +366,23 @@ class CONFETTI:
             window size, test instance index, NUN instance index, and the predicted class label of the counterfactual.
         """
 
-        #Validate that there are at least two objectives to optimize
-        number_of_objectives = int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
+        # Validate that there are at least two objectives to optimize
+        number_of_objectives = (
+            int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
+        )
         if number_of_objectives < 2:
-            raise CONFETTIConfigurationError("At least two objectives must be optimized. "
-                                             "Set `optimize_confidence`, `optimize_sparsity`, or `optimize_proximity` to True.")
+            raise CONFETTIConfigurationError(
+                "At least two objectives must be optimized. "
+                "Set `optimize_confidence`, `optimize_sparsity`, or `optimize_proximity` to True."
+            )
 
         # Initialize Values
         query = self.instances_to_explain[instance_index]
 
         nun = copy.deepcopy(self.reference_data[nun_index])
-        solutions = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance", 'CE Label'])
+        solutions = pd.DataFrame(
+            columns=["Solution", "Window", "Test Instance", "NUN Instance", "CE Label"]
+        )
 
         # Start Optimization Search
         high = subsequence_length
@@ -333,42 +393,47 @@ class CONFETTI:
             start_time = time.time()
             window = (low + high) // 2
             if verbose:
-                print(f"Optimization of CE for Instance {instance_index} in Window {window}")
+                print(
+                    f"Optimization of CE for Instance {instance_index} in Window {window}"
+                )
             # Timestep where it starts
-            if self.weights is None: #Only happens if ablation_study is True
+            if self.weights is None:  # Only happens if ablation_study is True
                 starting_point = 0
             else:
                 starting_point = self.findsubarray((self.weights[nun_index]), window)
             end_point = starting_point + window
 
             # Define the Counterfactual Problem
-            problem = CounterfactualProblem(original_instance=query,
-                                            nun_instance=nun,
-                                            nun_index=nun_index,
-                                            start_timestep=starting_point,
-                                            subsequence_length=window,
-                                            classifier=model,
-                                            reference_labels=self.reference_labels,
-                                            optimize_confidence=optimize_confidence,
-                                            optimize_sparsity=optimize_sparsity,
-                                            optimize_proximity=optimize_proximity,
-                                            proximity_distance=proximity_distance,
-                                            dtw_window=dtw_window,
-                                            alpha=alpha,
-                                            theta=theta)
+            problem = CounterfactualProblem(
+                original_instance=query,
+                nun_instance=nun,
+                nun_index=nun_index,
+                start_timestep=starting_point,
+                subsequence_length=window,
+                classifier=model,
+                reference_labels=self.reference_labels,
+                optimize_confidence=optimize_confidence,
+                optimize_sparsity=optimize_sparsity,
+                optimize_proximity=optimize_proximity,
+                proximity_distance=proximity_distance,
+                dtw_window=dtw_window,
+                alpha=alpha,
+                theta=theta,
+            )
 
             # create the reference directions to be used for the optimization in NSGA3
-            ref_dirs = get_reference_directions("das-dennis",
-                                                n_dim=number_of_objectives,
-                                                n_partitions=n_partitions)
+            ref_dirs = get_reference_directions(
+                "das-dennis", n_dim=number_of_objectives, n_partitions=n_partitions
+            )
 
             # NSGA-III Algorithm
-            algorithm = NSGA3(pop_size=population_size,
-                              ref_dirs=ref_dirs,
-                              sampling=BinaryRandomSampling(),
-                              crossover=TwoPointCrossover(prob=crossover_probability),
-                              mutation=BitflipMutation(prob=mutation_probability),
-                              )
+            algorithm = NSGA3(
+                pop_size=population_size,
+                ref_dirs=ref_dirs,
+                sampling=BinaryRandomSampling(),
+                crossover=TwoPointCrossover(prob=crossover_probability),
+                mutation=BitflipMutation(prob=mutation_probability),
+            )
 
             # Only do 100 generations
             termination = get_termination("n_gen", maximum_number_of_generations)
@@ -383,40 +448,55 @@ class CONFETTI:
                 for x in res.X:
                     x_reshaped = res.X[0].reshape(window, query.shape[1])
                     op_counterfactual = np.copy(query)
-                    op_counterfactual[starting_point:end_point][x_reshaped] = nun[starting_point:end_point][x_reshaped]
+                    op_counterfactual[starting_point:end_point][x_reshaped] = nun[
+                        starting_point:end_point
+                    ][x_reshaped]
 
-                    op_counterfactual_reshaped = op_counterfactual.reshape(1, op_counterfactual.shape[0],
-                                                                           op_counterfactual.shape[1])
-                    ce_label = np.argmax(model.predict(op_counterfactual_reshaped, verbose=False), axis=1)
-                    row_dict = {'Solution': [op_counterfactual], 'Window': window, 'Test Instance': instance_index,
-                                'NUN Instance': nun_index, 'CE Label': ce_label[0]}
+                    op_counterfactual_reshaped = op_counterfactual.reshape(
+                        1, op_counterfactual.shape[0], op_counterfactual.shape[1]
+                    )
+                    ce_label = np.argmax(
+                        model.predict(op_counterfactual_reshaped, verbose=False), axis=1
+                    )
+                    row_dict = {
+                        "Solution": [op_counterfactual],
+                        "Window": window,
+                        "Test Instance": instance_index,
+                        "NUN Instance": nun_index,
+                        "CE Label": ce_label[0],
+                    }
                     row_df = pd.DataFrame(row_dict)
                     solutions = pd.concat([solutions, row_df], ignore_index=True)
 
                 high = window - 1
             final_time = time.time() - start_time
             if verbose:
-                print(f'Instance: {instance_index} | Window: {window} | Time: {final_time}')
+                print(
+                    f"Instance: {instance_index} | Window: {window} | Time: {final_time}"
+                )
         if verbose:
             print(f"Optimization of CE for Instance {instance_index} finished.")
         return solutions
 
-    def one_pass(self, test_instance: int,
-                 alpha: float = 0.5,
-                 theta: float = 0.51,
-                 n_partitions: int = 12,
-                 population_size: int = 100,
-                 maximum_number_of_generations: float = 100,
-                 crossover_probability: float = 1.0,
-                 mutation_probability: float = 0.9,
-                 optimize_confidence: bool = True,
-                 optimize_sparsity: bool = True,
-                 optimize_proximity: bool = False,
-                 proximity_distance: str = "euclidean",
-                 dtw_window: Optional[int] = None,
-                 verbose: bool = False,
-                 ablation_study:bool = False,
-                 ablation_ts_length: int = 0):
+    def one_pass(
+        self,
+        test_instance: int,
+        alpha: float = 0.5,
+        theta: float = 0.51,
+        n_partitions: int = 12,
+        population_size: int = 100,
+        maximum_number_of_generations: float = 100,
+        crossover_probability: float = 1.0,
+        mutation_probability: float = 0.9,
+        optimize_confidence: bool = True,
+        optimize_sparsity: bool = True,
+        optimize_proximity: bool = False,
+        proximity_distance: str = "euclidean",
+        dtw_window: Optional[int] = None,
+        verbose: bool = False,
+        ablation_study: bool = False,
+        ablation_ts_length: int = 0,
+    ):
         """
         Execute one full counterfactual generation cycle for a single test instance.
 
@@ -478,14 +558,19 @@ class CONFETTI:
         # Load model
         model = keras.models.load_model(self.model_path)
         # Find the Nearest Unlike Neighbour
-        nun_result = self.nearest_unlike_neighbour(query=self.instances_to_explain[test_instance],
-                                            predicted_label=self.original_labels[test_instance],
-                                            distance=proximity_distance,
-                                            n_neighbors=1,
-                                            theta=theta)
+        nun_result = self.nearest_unlike_neighbour(
+            query=self.instances_to_explain[test_instance],
+            predicted_label=self.original_labels[test_instance],
+            distance=proximity_distance,
+            n_neighbors=1,
+            theta=theta,
+        )
         if nun_result[0] is None:
             if verbose:
-                warnings.warn(f"No NUN found for instance {test_instance} with theta {theta}.", UserWarning)
+                warnings.warn(
+                    f"No NUN found for instance {test_instance} with theta {theta}.",
+                    UserWarning,
+                )
             return None, None, None
         else:
             nun = int(nun_result[1][0])
@@ -493,84 +578,91 @@ class CONFETTI:
         if ablation_study:
             # If ablation study is enabled, skip the naive stage and directly optimize the entire time series
             if verbose:
-                print(f'Ablation study enabled. Skipping naive stage.')
-                print(f'Optimization stage started for instance {test_instance}')
-                optimized = self.optimization(instance_index=test_instance,
-                                              nun_index=nun,
-                                              subsequence_length=ablation_ts_length,
-                                              model=model,
-                                              alpha=alpha,
-                                              theta=theta,
-                                              n_partitions=n_partitions,
-                                              population_size=population_size,
-                                              maximum_number_of_generations=maximum_number_of_generations,
-                                              crossover_probability=crossover_probability,
-                                              mutation_probability=mutation_probability,
-                                              optimize_confidence=optimize_confidence,
-                                              optimize_sparsity=optimize_sparsity,
-                                              optimize_proximity=optimize_proximity,
-                                              proximity_distance=proximity_distance,
-                                              dtw_window=dtw_window,
-                                              verbose=verbose)
+                print(f"Ablation study enabled. Skipping naive stage.")
+                print(f"Optimization stage started for instance {test_instance}")
+                optimized = self.optimization(
+                    instance_index=test_instance,
+                    nun_index=nun,
+                    subsequence_length=ablation_ts_length,
+                    model=model,
+                    alpha=alpha,
+                    theta=theta,
+                    n_partitions=n_partitions,
+                    population_size=population_size,
+                    maximum_number_of_generations=maximum_number_of_generations,
+                    crossover_probability=crossover_probability,
+                    mutation_probability=mutation_probability,
+                    optimize_confidence=optimize_confidence,
+                    optimize_sparsity=optimize_sparsity,
+                    optimize_proximity=optimize_proximity,
+                    proximity_distance=proximity_distance,
+                    dtw_window=dtw_window,
+                    verbose=verbose,
+                )
                 naive = None
                 return nun, naive, optimized
         else:
             # Naive Stage
-            naive = self.naive_stage(instance_index=test_instance,
-                                        nun_index=nun,
-                                        model=model,
-                                        theta=theta,
-                                        verbose=verbose)
+            naive = self.naive_stage(
+                instance_index=test_instance,
+                nun_index=nun,
+                model=model,
+                theta=theta,
+                verbose=verbose,
+            )
             if verbose:
-                print(f'Naive stage finished for instance {test_instance}')
+                print(f"Naive stage finished for instance {test_instance}")
 
-                print(f'Optimization stage started for instance {test_instance}')
+                print(f"Optimization stage started for instance {test_instance}")
 
             # Optimization
-            optimized = self.optimization(instance_index=test_instance,
-                                          nun_index=nun,
-                                          subsequence_length=naive.iloc[0]["Window"],
-                                          model=model,
-                                          alpha=alpha,
-                                          theta=theta,
-                                          n_partitions=n_partitions,
-                                          population_size=population_size,
-                                          maximum_number_of_generations=maximum_number_of_generations,
-                                          crossover_probability=crossover_probability,
-                                          mutation_probability=mutation_probability,
-                                          optimize_confidence=optimize_confidence,
-                                          optimize_sparsity=optimize_sparsity,
-                                          optimize_proximity=optimize_proximity,
-                                          proximity_distance=proximity_distance,
-                                          dtw_window=dtw_window,
-                                          verbose=verbose)
+            optimized = self.optimization(
+                instance_index=test_instance,
+                nun_index=nun,
+                subsequence_length=naive.iloc[0]["Window"],
+                model=model,
+                alpha=alpha,
+                theta=theta,
+                n_partitions=n_partitions,
+                population_size=population_size,
+                maximum_number_of_generations=maximum_number_of_generations,
+                crossover_probability=crossover_probability,
+                mutation_probability=mutation_probability,
+                optimize_confidence=optimize_confidence,
+                optimize_sparsity=optimize_sparsity,
+                optimize_proximity=optimize_proximity,
+                proximity_distance=proximity_distance,
+                dtw_window=dtw_window,
+                verbose=verbose,
+            )
 
             return nun, naive, optimized
 
+        # return nun, naive, optimized
 
-        #return nun, naive, optimized
-
-    def parallelized_counterfactual_generator(self,
-                                              instances_to_explain: np.array,
-                                              reference_data: np.array,
-                                              reference_weights: Optional[np.array] = None,
-                                              alpha: float = 0.5,
-                                              theta: float = 0.51,
-                                              n_partitions: int = 12,
-                                              population_size: int = 100,
-                                              maximum_number_of_generations: int = 100,
-                                              crossover_probability: float = 1.0,
-                                              mutation_probability: float = 0.9,
-                                              optimize_confidence: bool = True,
-                                              optimize_sparsity: bool = True,
-                                              optimize_proximity: bool = False,
-                                              proximity_distance: str = "euclidean",
-                                              dtw_window: Optional[int] = None,
-                                              processes: int = 8,
-                                              save_counterfactuals: bool = False,
-                                              output_path: Optional[str] = None,
-                                              verbose: bool = False,
-                                              ablation_study: bool = False):
+    def parallelized_counterfactual_generator(
+        self,
+        instances_to_explain: np.array,
+        reference_data: np.array,
+        reference_weights: Optional[np.array] = None,
+        alpha: float = 0.5,
+        theta: float = 0.51,
+        n_partitions: int = 12,
+        population_size: int = 100,
+        maximum_number_of_generations: int = 100,
+        crossover_probability: float = 1.0,
+        mutation_probability: float = 0.9,
+        optimize_confidence: bool = True,
+        optimize_sparsity: bool = True,
+        optimize_proximity: bool = False,
+        proximity_distance: str = "euclidean",
+        dtw_window: Optional[int] = None,
+        processes: int = 8,
+        save_counterfactuals: bool = False,
+        output_path: Optional[str] = None,
+        verbose: bool = False,
+        ablation_study: bool = False,
+    ):
         """
         Generate counterfactual explanations in parallel for a set of input instances using CONFETTI.
 
@@ -639,32 +731,41 @@ class CONFETTI:
         """
         self.__validate_types(locals(), context="parallelized_counterfactual_generator")
         self.instances_to_explain = instances_to_explain
-        self.original_labels = np.argmax(self.model.predict(self.instances_to_explain, verbose=0), axis=1)
+        self.original_labels = np.argmax(
+            self.model.predict(self.instances_to_explain, verbose=0), axis=1
+        )
         self.reference_data = reference_data
-        self.reference_labels = np.argmax(self.model.predict(self.reference_data, verbose=0), axis=1)
+        self.reference_labels = np.argmax(
+            self.model.predict(self.reference_data, verbose=0), axis=1
+        )
         self.weights = reference_weights
 
-        self.naive_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
-        self.optimized_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
+        self.naive_counterfactuals = pd.DataFrame(
+            columns=["Solution", "Window", "Test Instance", "NUN Instance"]
+        )
+        self.optimized_counterfactuals = pd.DataFrame(
+            columns=["Solution", "Window", "Test Instance", "NUN Instance"]
+        )
 
         pool = Pool(processes=processes)
-        wrapped_one_pass = partial(self.one_pass,
-                                   alpha=alpha,
-                                   theta=theta,
-                                   n_partitions=n_partitions,
-                                   population_size=population_size,
-                                   maximum_number_of_generations=maximum_number_of_generations,
-                                   crossover_probability=crossover_probability,
-                                   mutation_probability=mutation_probability,
-                                   optimize_confidence=optimize_confidence,
-                                   optimize_sparsity=optimize_sparsity,
-                                   optimize_proximity=optimize_proximity,
-                                   proximity_distance=proximity_distance,
-                                   dtw_window=dtw_window,
-                                   verbose=verbose,
-                                   ablation_study=ablation_study,
-                                   ablation_ts_length=instances_to_explain.shape[1])
-
+        wrapped_one_pass = partial(
+            self.one_pass,
+            alpha=alpha,
+            theta=theta,
+            n_partitions=n_partitions,
+            population_size=population_size,
+            maximum_number_of_generations=maximum_number_of_generations,
+            crossover_probability=crossover_probability,
+            mutation_probability=mutation_probability,
+            optimize_confidence=optimize_confidence,
+            optimize_sparsity=optimize_sparsity,
+            optimize_proximity=optimize_proximity,
+            proximity_distance=proximity_distance,
+            dtw_window=dtw_window,
+            verbose=verbose,
+            ablation_study=ablation_study,
+            ablation_ts_length=instances_to_explain.shape[1],
+        )
 
         res = pool.map(wrapped_one_pass, range(len(self.instances_to_explain)))
         pool.close()
@@ -674,13 +775,19 @@ class CONFETTI:
             nun, naive_df, optimized_df = r
             self.nuns.append(nun)
             if naive_df is not None:
-                self.naive_counterfactuals = pd.concat([self.naive_counterfactuals, naive_df], ignore_index=True)
+                self.naive_counterfactuals = pd.concat(
+                    [self.naive_counterfactuals, naive_df], ignore_index=True
+                )
             if optimized_df is not None:
-                self.optimized_counterfactuals = pd.concat([self.optimized_counterfactuals, optimized_df],
-                                                           ignore_index=True)
+                self.optimized_counterfactuals = pd.concat(
+                    [self.optimized_counterfactuals, optimized_df], ignore_index=True
+                )
 
-        self.optimized_counterfactuals = self.optimized_counterfactuals.groupby('Test Instance', as_index=False).apply(
-            lambda x: x.drop_duplicates(subset='Window')).reset_index(drop=True)
+        self.optimized_counterfactuals = (
+            self.optimized_counterfactuals.groupby("Test Instance", as_index=False)
+            .apply(lambda x: x.drop_duplicates(subset="Window"))
+            .reset_index(drop=True)
+        )
 
         if save_counterfactuals:
             # If directory is not specified, use the current one
@@ -689,36 +796,47 @@ class CONFETTI:
 
             # Convert Solution arrays to space-separated strings for CSV compatibility
             if naive_df is not None:
-                self.naive_counterfactuals['Solution'] = self.naive_counterfactuals['Solution'].apply(array_to_string)
-            self.optimized_counterfactuals['Solution'] = self.optimized_counterfactuals['Solution'].apply(array_to_string)
+                self.naive_counterfactuals["Solution"] = self.naive_counterfactuals[
+                    "Solution"
+                ].apply(array_to_string)
+            self.optimized_counterfactuals["Solution"] = self.optimized_counterfactuals[
+                "Solution"
+            ].apply(array_to_string)
 
             # Save files as csv
             if naive_df is not None:
-                self.naive_counterfactuals.to_csv(output_directory / f'confetti_naive_counterfactuals.csv', index=False)
-            self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv',
-                                                  index=False)
-            print(f'Counterfactuals saved on {output_directory}')
+                self.naive_counterfactuals.to_csv(
+                    output_directory / f"confetti_naive_counterfactuals.csv",
+                    index=False,
+                )
+            self.optimized_counterfactuals.to_csv(
+                output_directory / "confetti_optimized_counterfactuals.csv", index=False
+            )
+            print(f"Counterfactuals saved on {output_directory}")
 
         return self.naive_counterfactuals, self.optimized_counterfactuals
 
-    def counterfactual_generator(self, instances_to_explain: np.array,
-                                 reference_data: np.array,
-                                 reference_weights: np.array,
-                                 alpha: float = 0.5,
-                                 theta: float = 0.51,
-                                 n_partitions: int = 12,
-                                 population_size: int = 100,
-                                 maximum_number_of_generations: int = 100,
-                                 crossover_probability: float = 1.0,
-                                 mutation_probability: float = 0.9,
-                                 optimize_confidence: bool = True,
-                                 optimize_sparsity: bool = True,
-                                 optimize_proximity: bool = False,
-                                 proximity_distance: str = "euclidean",
-                                 dtw_window: Optional[int] = None,
-                                 save_counterfactuals: bool = False,
-                                 output_path: Optional[str] = None,
-                                 verbose: bool = False):
+    def counterfactual_generator(
+        self,
+        instances_to_explain: np.array,
+        reference_data: np.array,
+        reference_weights: np.array,
+        alpha: float = 0.5,
+        theta: float = 0.51,
+        n_partitions: int = 12,
+        population_size: int = 100,
+        maximum_number_of_generations: int = 100,
+        crossover_probability: float = 1.0,
+        mutation_probability: float = 0.9,
+        optimize_confidence: bool = True,
+        optimize_sparsity: bool = True,
+        optimize_proximity: bool = False,
+        proximity_distance: str = "euclidean",
+        dtw_window: Optional[int] = None,
+        save_counterfactuals: bool = False,
+        output_path: Optional[str] = None,
+        verbose: bool = False,
+    ):
         """
         Generate counterfactual explanations sequentially for a set of input instances using CONFETTI.
 
@@ -775,21 +893,27 @@ class CONFETTI:
             Results are optionally saved to disk and/or stored internally for further use.
         """
 
-        self.__validate_types(locals(), context= "counterfactual_generator")
+        self.__validate_types(locals(), context="counterfactual_generator")
         self.instances_to_explain = instances_to_explain
-        self.original_labels = np.argmax(self.model.predict(self.instances_to_explain, verbose=0), axis=1)
+        self.original_labels = np.argmax(
+            self.model.predict(self.instances_to_explain, verbose=0), axis=1
+        )
         self.reference_data = reference_data
-        self.reference_labels = np.argmax(self.model.predict(self.reference_data, verbose=0), axis=1)
+        self.reference_labels = np.argmax(
+            self.model.predict(self.reference_data, verbose=0), axis=1
+        )
         self.weights = reference_weights
 
         valid_instances = []
         # Find NUNs (may return None)
         for instance in range(len(instances_to_explain)):
-            result = self.nearest_unlike_neighbour(query=self.instances_to_explain[instance],
-                                                   predicted_label=self.original_labels[instance],
-                                                   distance=proximity_distance,
-                                                   n_neighbors=1,
-                                                   theta=theta)
+            result = self.nearest_unlike_neighbour(
+                query=self.instances_to_explain[instance],
+                predicted_label=self.original_labels[instance],
+                distance=proximity_distance,
+                n_neighbors=1,
+                theta=theta,
+            )
             if result is not None and result[1] is not None and len(result[1]) > 0:
                 self.nuns.append(int(result[1][0]))
                 valid_instances.append(instance)
@@ -799,57 +923,70 @@ class CONFETTI:
         self.nuns = np.array(self.nuns)
         test_instances = np.array(valid_instances)
 
-            # Naive Counterfactuals
-        self.naive_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
+        # Naive Counterfactuals
+        self.naive_counterfactuals = pd.DataFrame(
+            columns=["Solution", "Window", "Test Instance", "NUN Instance"]
+        )
         for test_instance, nun in zip(test_instances, self.nuns):
-            naive_df = self.naive_stage(instance_index=test_instance,
-                                           nun_index=nun,
-                                           model=self.model,
-                                           theta=theta)
+            naive_df = self.naive_stage(
+                instance_index=test_instance,
+                nun_index=nun,
+                model=self.model,
+                theta=theta,
+            )
             if naive_df is not None:
-                self.naive_counterfactuals = pd.concat([self.naive_counterfactuals, naive_df], ignore_index=True)
+                self.naive_counterfactuals = pd.concat(
+                    [self.naive_counterfactuals, naive_df], ignore_index=True
+                )
 
-
-        self.optimized_counterfactuals = pd.DataFrame(columns=["Solution", "Window", "Test Instance", "NUN Instance"])
+        self.optimized_counterfactuals = pd.DataFrame(
+            columns=["Solution", "Window", "Test Instance", "NUN Instance"]
+        )
 
         for test_instance in test_instances:
             # Filter naive counterfactuals for this test instance
             naive_row = self.naive_counterfactuals[
-                self.naive_counterfactuals["Test Instance"] == test_instance]
+                self.naive_counterfactuals["Test Instance"] == test_instance
+            ]
 
             if naive_row.empty:
-                print(f"Skipping optimization for instance {test_instance}: no naive counterfactual found.")
+                print(
+                    f"Skipping optimization for instance {test_instance}: no naive counterfactual found."
+                )
                 continue  # No naive CE means we cannot optimize
 
             window_val = naive_row["Window"].iloc[0]
             nun = self.nuns[test_instances.tolist().index(test_instance)]
 
-            opt_df = self.optimization(instance_index=test_instance,
-                                        nun_index=nun,
-                                        subsequence_length=window_val,
-                                        model=self.model,
-                                        alpha=alpha,
-                                        theta=theta,
-                                        n_partitions=n_partitions,
-                                        population_size=population_size,
-                                        maximum_number_of_generations=maximum_number_of_generations,
-                                        crossover_probability=crossover_probability,
-                                        mutation_probability=mutation_probability,
-                                        optimize_confidence=optimize_confidence,
-                                        optimize_sparsity=optimize_sparsity,
-                                        optimize_proximity=optimize_proximity,
-                                        proximity_distance=proximity_distance,
-                                        dtw_window=dtw_window,
-                                        verbose=verbose)
+            opt_df = self.optimization(
+                instance_index=test_instance,
+                nun_index=nun,
+                subsequence_length=window_val,
+                model=self.model,
+                alpha=alpha,
+                theta=theta,
+                n_partitions=n_partitions,
+                population_size=population_size,
+                maximum_number_of_generations=maximum_number_of_generations,
+                crossover_probability=crossover_probability,
+                mutation_probability=mutation_probability,
+                optimize_confidence=optimize_confidence,
+                optimize_sparsity=optimize_sparsity,
+                optimize_proximity=optimize_proximity,
+                proximity_distance=proximity_distance,
+                dtw_window=dtw_window,
+                verbose=verbose,
+            )
             if opt_df is not None:
                 self.optimized_counterfactuals = pd.concat(
                     [self.optimized_counterfactuals, opt_df], ignore_index=True
                 )
 
-        self.optimized_counterfactuals = self.optimized_counterfactuals.groupby('Test Instance',
-                                                                                as_index=False).apply(
-            lambda x: x.drop_duplicates(subset='Window')
-        ).reset_index(drop=True)
+        self.optimized_counterfactuals = (
+            self.optimized_counterfactuals.groupby("Test Instance", as_index=False)
+            .apply(lambda x: x.drop_duplicates(subset="Window"))
+            .reset_index(drop=True)
+        )
 
         if save_counterfactuals:
             # Create the directory if it doesn't exist
@@ -857,15 +994,21 @@ class CONFETTI:
             output_directory.mkdir(parents=True, exist_ok=True)
 
             # Convert Solution arrays to space-separated strings for CSV compatibility
-            self.naive_counterfactuals['Solution'] = self.naive_counterfactuals['Solution'].apply(array_to_string)
+            self.naive_counterfactuals["Solution"] = self.naive_counterfactuals[
+                "Solution"
+            ].apply(array_to_string)
 
             # Save the naive counterfactuals
-            self.naive_counterfactuals.to_csv(output_directory / 'confetti_naive_counterfactuals.csv', index=False)
+            self.naive_counterfactuals.to_csv(
+                output_directory / "confetti_naive_counterfactuals.csv", index=False
+            )
 
-            self.optimized_counterfactuals['Solution'] = self.optimized_counterfactuals['Solution'].apply(
-                array_to_string)
-            self.optimized_counterfactuals.to_csv(output_directory / 'confetti_optimized_counterfactuals.csv',
-                                                  index=False)
+            self.optimized_counterfactuals["Solution"] = self.optimized_counterfactuals[
+                "Solution"
+            ].apply(array_to_string)
+            self.optimized_counterfactuals.to_csv(
+                output_directory / "confetti_optimized_counterfactuals.csv", index=False
+            )
 
     @staticmethod
     def __validate_types(arguments: dict, context: str = ""):

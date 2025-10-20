@@ -1,8 +1,10 @@
 import os
-import pandas as pd
-import numpy as np
 import config as cfg
-from confetti.explainer.utils import load_data, get_samples, load_multivariate_ts_from_csv
+from confetti.explainer.utils import (
+    load_data,
+    get_samples,
+    load_multivariate_ts_from_csv,
+)
 
 if __name__ == "__main__":
     # Current directory
@@ -28,4 +30,6 @@ if __name__ == "__main__":
         if X_loaded.shape == X_expected.shape and y_loaded.shape == y_expected.shape:
             print(f"✅ {dataset}: Data shape is correct! {X_loaded.shape}")
         else:
-            print(f"❌ {dataset}: Shape mismatch! Expected {X_expected.shape}, but got {X_loaded.shape}")
+            print(
+                f"❌ {dataset}: Shape mismatch! Expected {X_expected.shape}, but got {X_loaded.shape}"
+            )

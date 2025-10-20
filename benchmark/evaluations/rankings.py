@@ -7,6 +7,7 @@ import scikit_posthocs as sp
 import config as cfg
 from sklearn.preprocessing import MinMaxScaler
 
+
 def normalize_proximity_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
     Normalize proximity metrics (L1, L2, DTW) to [0,1] within each Dataset.
@@ -31,15 +32,15 @@ def normalize_proximity_metrics(df: pd.DataFrame) -> pd.DataFrame:
     data = df.copy()
 
     for col in proximity_cols:
-        data[col + " Norm"] = (
-            data.groupby("Dataset")[col]
-              .transform(lambda x: MinMaxScaler().fit_transform(x.values.reshape(-1, 1)).flatten())
+        data[col + " Norm"] = data.groupby("Dataset")[col].transform(
+            lambda x: MinMaxScaler().fit_transform(x.values.reshape(-1, 1)).flatten()
         )
     return data
 
-def rank_data(df: pd.DataFrame,
-              metric: str,
-              higher_is_better: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame]:
+
+def rank_data(
+    df: pd.DataFrame, metric: str, higher_is_better: bool = True
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Rank methods per dataset for a given metric.
     """
@@ -48,16 +49,19 @@ def rank_data(df: pd.DataFrame,
     if higher_is_better:
         ranked = pivot.apply(
             lambda row: rankdata(-row.values, method="average"),
-            axis=1, result_type="expand"
+            axis=1,
+            result_type="expand",
         )
     else:
         ranked = pivot.apply(
             lambda row: rankdata(row.values, method="average"),
-            axis=1, result_type="expand"
+            axis=1,
+            result_type="expand",
         )
 
     ranked.columns = pivot.columns
     return ranked, pivot
+
 
 def friedman_test(rank_df: pd.DataFrame) -> float:
     """
@@ -78,9 +82,11 @@ def nemenyi_test(rank_df: pd.DataFrame) -> pd.DataFrame:
     return nemenyi
 
 
-def do_statistical_test(results: pd.DataFrame,
-                        alpha: float = 0.05,
-                        output_excel: str = "nemenyi_resnet.xlsx") -> None:
+def do_statistical_test(
+    results: pd.DataFrame,
+    alpha: float = 0.05,
+    output_excel: str = "nemenyi_resnet.xlsx",
+) -> None:
     """
     Full pipeline: rank -> Friedman -> Nemenyi (ResNet only).
     Save all Nemenyi matrices + average metric values to Excel.
@@ -133,21 +139,24 @@ def main():
     results = pd.read_csv(cfg.EVALUATIONS_FILE)
 
     confetti_method_map = {
-        'Confetti Optimized (alpha=0.5)': 'Confetti α=0.5',
-        'Confetti Optimized (theta=0.95)': 'Confetti θ=0.95',
-        'Confetti Optimized (alpha=0.0)': 'Confetti α=0.0',
-        'Ablation Study (alpha=0.5)': 'Ablation Study α=0.5',
-        'Ablation Study (theta=0.95)': 'Ablation Study θ=0.95',
-        'Ablation Study (alpha=0.0)': 'Ablation Study α=0.0',
+        "Confetti Optimized (alpha=0.5)": "Confetti α=0.5",
+        "Confetti Optimized (theta=0.95)": "Confetti θ=0.95",
+        "Confetti Optimized (alpha=0.0)": "Confetti α=0.0",
+        "Ablation Study (alpha=0.5)": "Ablation Study α=0.5",
+        "Ablation Study (theta=0.95)": "Ablation Study θ=0.95",
+        "Ablation Study (alpha=0.0)": "Ablation Study α=0.0",
     }
 
-    filtered_results = results[results['Explainer'].isin(confetti_method_map)].copy()
-    filtered_results['Explainer'] = filtered_results['Explainer'].replace(confetti_method_map)
+    filtered_results = results[results["Explainer"].isin(confetti_method_map)].copy()
+    filtered_results["Explainer"] = filtered_results["Explainer"].replace(
+        confetti_method_map
+    )
 
-    cleaned_results = filtered_results.drop(columns=['Param Config', 'Alpha'])
+    cleaned_results = filtered_results.drop(columns=["Param Config", "Alpha"])
     cleaned_results = normalize_proximity_metrics(cleaned_results)
 
     do_statistical_test(cleaned_results, alpha=0.05, output_excel="nemenyi_resnet.xlsx")
+
 
 if __name__ == "__main__":
     main()

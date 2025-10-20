@@ -8,7 +8,14 @@ from pathlib import Path
 import config as cfg
 
 
-def compute_weights_cam(model, X_data, dataset, save_weights=True, weights_directory=None, data_type='testing'):
+def compute_weights_cam(
+    model,
+    X_data,
+    dataset,
+    save_weights=True,
+    weights_directory=None,
+    data_type="testing",
+):
     """
     Compute class activation maps (CAMs) for the given data.
 
@@ -35,15 +42,24 @@ def compute_weights_cam(model, X_data, dataset, save_weights=True, weights_direc
     weights = []
 
     # Detect model type
-    if isinstance(model, tf.keras.Model):  # TensorFlow/Keras Model (Keras 3 & TensorFlow 2.18.0)
-        last_conv_layer = model.get_layer(index=-3)  # Assuming last conv layer is 3rd from the end
+    if isinstance(
+        model, tf.keras.Model
+    ):  # TensorFlow/Keras Model (Keras 3 & TensorFlow 2.18.0)
+        last_conv_layer = model.get_layer(
+            index=-3
+        )  # Assuming last conv layer is 3rd from the end
         classifier_layer = model.get_layer(index=-1)  # Output layer
         w_k_c = classifier_layer.weights[0].numpy()
 
-        model_cam = tf.keras.Model(inputs=model.input, outputs=[last_conv_layer.output, classifier_layer.output])
+        model_cam = tf.keras.Model(
+            inputs=model.input,
+            outputs=[last_conv_layer.output, classifier_layer.output],
+        )
 
         for ts in X_data:
-            ts = ts[np.newaxis, ...] if ts.ndim == 2 else ts.reshape(1, -1, ts.shape[-1])
+            ts = (
+                ts[np.newaxis, ...] if ts.ndim == 2 else ts.reshape(1, -1, ts.shape[-1])
+            )
             conv_out, predicted = model_cam(ts)
             pred_label = np.argmax(predicted)
 
@@ -54,7 +70,9 @@ def compute_weights_cam(model, X_data, dataset, save_weights=True, weights_direc
 
     elif isinstance(model, torch.nn.Module):  # PyTorch 2.6.0 Model
         model.eval()
-        last_conv_layer = list(model.children())[-3]  # Assuming the last conv layer is the 3rd from the end
+        last_conv_layer = list(model.children())[
+            -3
+        ]  # Assuming the last conv layer is the 3rd from the end
         classifier_layer = list(model.children())[-1]
 
         def hook_fn(module, input, output):
@@ -62,13 +80,16 @@ def compute_weights_cam(model, X_data, dataset, save_weights=True, weights_direc
 
         activation = None
         hook = last_conv_layer.register_forward_hook(
-            lambda module, input, output: setattr(module, 'activation', output))
+            lambda module, input, output: setattr(module, "activation", output)
+        )
 
         with torch.no_grad():
             for ts in X_data:
-                ts = torch.tensor(ts, dtype=torch.float32).unsqueeze(0) if len(ts.shape) == 2 else torch.tensor(ts,
-                                                                                                                dtype=torch.float32).unsqueeze(
-                    0)
+                ts = (
+                    torch.tensor(ts, dtype=torch.float32).unsqueeze(0)
+                    if len(ts.shape) == 2
+                    else torch.tensor(ts, dtype=torch.float32).unsqueeze(0)
+                )
                 logits = model(ts)
                 pred_label = torch.argmax(logits, dim=1).item()
 
@@ -82,7 +103,9 @@ def compute_weights_cam(model, X_data, dataset, save_weights=True, weights_direc
 
         hook.remove()  # Remove hook to prevent memory leaks
     else:
-        raise TypeError("Unsupported model type. Provide a Keras, TensorFlow, or PyTorch model.")
+        raise TypeError(
+            "Unsupported model type. Provide a Keras, TensorFlow, or PyTorch model."
+        )
 
     weights = np.array(weights)
 
@@ -115,12 +138,12 @@ def visualize_cam(weights: np.ndarray, instance_index: int):
     # Plotting
     plt.figure(figsize=(10, 6))  # Set figure size
     sns.set_theme(style="whitegrid")  # Set Seaborn theme
-    sns.lineplot(data=sample, color='#018575', alpha=0.7, linewidth=2)
+    sns.lineplot(data=sample, color="#018575", alpha=0.7, linewidth=2)
 
     # Titles and labels
-    plt.title(f'Class Activation Map for Instance {instance_index}')
-    plt.xlabel('Time Steps')
-    plt.ylabel('Normalized Weight')
+    plt.title(f"Class Activation Map for Instance {instance_index}")
+    plt.xlabel("Time Steps")
+    plt.ylabel("Normalized Weight")
     plt.ylim(0, 1)  # Setting y-axis limits
 
     # Show plot

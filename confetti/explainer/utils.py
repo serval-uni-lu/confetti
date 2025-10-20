@@ -5,12 +5,13 @@ from sktime.datasets import load_UCR_UEA_dataset
 import config as cfg
 import pandas as pd
 
+
 def convert_string_to_array(data_string, timesteps, channels):
     # Remove the square brackets and newline characters
-    cleaned_data = data_string.replace('[', '').replace(']', '').replace('\n', '')
+    cleaned_data = data_string.replace("[", "").replace("]", "").replace("\n", "")
 
     # Convert the cleaned string to a numpy array
-    array_data = np.fromstring(cleaned_data, sep=' ')
+    array_data = np.fromstring(cleaned_data, sep=" ")
 
     # Reshape the array into the correct dimensions
     # Ensure the correct total number of elements before reshaping
@@ -20,10 +21,12 @@ def convert_string_to_array(data_string, timesteps, channels):
     else:
         raise ValueError(f"Data does not match expected size ({timesteps}, {channels})")
 
-def load_data(dataset:str, one_hot=True):
 
+def load_data(dataset: str, one_hot=True):
     # Data will load with shape (instances, dimensions, timesteps)
-    X_train, y_train = load_UCR_UEA_dataset(dataset, split="train", return_type="numpy3d")
+    X_train, y_train = load_UCR_UEA_dataset(
+        dataset, split="train", return_type="numpy3d"
+    )
     X_test, y_test = load_UCR_UEA_dataset(dataset, split="test", return_type="numpy3d")
 
     # Reshape data to (instances, timesteps, dimensions)
@@ -36,14 +39,20 @@ def load_data(dataset:str, one_hot=True):
 
     if one_hot:
         # One Hot the labels for the CNN
-        y_train, y_test = keras.utils.to_categorical(y_train), keras.utils.to_categorical(y_test)
+        y_train, y_test = (
+            keras.utils.to_categorical(y_train),
+            keras.utils.to_categorical(y_test),
+        )
 
-    #print("Shape:", X_train.shape)
+    # print("Shape:", X_train.shape)
 
     return X_train, X_test, y_train, y_test
 
+
 def get_samples(dataset, one_hot=False):
-    X_train, X_test, y_train, y_test = load_data(dataset, one_hot=one_hot)  # Pass one_hot flag
+    X_train, X_test, y_train, y_test = load_data(
+        dataset, one_hot=one_hot
+    )  # Pass one_hot flag
 
     # Get available classes (based on non-one-hot labels)
     available_classes = np.unique(np.argmax(y_train, axis=1) if one_hot else y_train)
@@ -61,7 +70,9 @@ def get_samples(dataset, one_hot=False):
 
         if test_indices.size > 0:
             number_samples = cfg.NUMBER_OF_SAMPLES_PER_CLASS[dataset]
-            selected_test_indices = np.random.choice(test_indices, size=number_samples, replace=False)
+            selected_test_indices = np.random.choice(
+                test_indices, size=number_samples, replace=False
+            )
 
             X_test_samples.extend(X_test[selected_test_indices])
             y_test_samples.extend(y_test[selected_test_indices])
@@ -75,11 +86,12 @@ def get_samples(dataset, one_hot=False):
 
 from typing import Tuple, List, Any
 
+
 def get_predicted_samples(
-        dataset: str,
-        model: Any,
-        one_hot: bool = False,
-        rng: np.random.Generator | None = None
+    dataset: str,
+    model: Any,
+    one_hot: bool = False,
+    rng: np.random.Generator | None = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Return a test-set sample of size
@@ -104,23 +116,27 @@ def get_predicted_samples(
     y_pred_sel : np.ndarray
     """
     if rng is None:
-        rng = np.random.default_rng(42)                          # modern RNG
+        rng = np.random.default_rng(42)  # modern RNG
 
     # ── 1. Load data ───────────────────────────────────────────────────────────
     X_train, X_test, y_train, _ = load_data(dataset, one_hot=one_hot)
 
     # ── 2. Predict labels ──────────────────────────────────────────────────────
     y_pred_prob = model.predict(X_test, verbose=0)
-    y_pred = (np.argmax(y_pred_prob, axis=1) if y_pred_prob.ndim > 1
-              else y_pred_prob.astype(int))                    # binary models
+    y_pred = (
+        np.argmax(y_pred_prob, axis=1)
+        if y_pred_prob.ndim > 1
+        else y_pred_prob.astype(int)
+    )  # binary models
 
     # ── 3. Build per-class index pools ─────────────────────────────────────────
     classes: np.ndarray = np.unique(y_pred)
 
-    pools: dict[int, List[int]] = {cls: rng.permutation(np.where(y_pred == cls)[0]).tolist()
-                                   for cls in classes}
+    pools: dict[int, List[int]] = {
+        cls: rng.permutation(np.where(y_pred == cls)[0]).tolist() for cls in classes
+    }
 
-    n_per_cls  = cfg.NUMBER_OF_SAMPLES_PER_CLASS[dataset]
+    n_per_cls = cfg.NUMBER_OF_SAMPLES_PER_CLASS[dataset]
     target_len = len(classes) * n_per_cls
 
     selected_indices: list[int] = []
@@ -129,15 +145,15 @@ def get_predicted_samples(
     for cls in classes:
         take = min(n_per_cls, len(pools[cls]))
         selected_indices.extend(pools[cls][:take])
-        pools[cls] = pools[cls][take:]                         # remove taken
+        pools[cls] = pools[cls][take:]  # remove taken
 
     # ── 5. Second pass: round-robin top-up across remaining pools ──────────────
     # Keep cycling through classes and grabbing one at a time
-    cls_cycle = list(classes)                                  # deterministic order
+    cls_cycle = list(classes)  # deterministic order
     cycle_idx = 0
     while len(selected_indices) < target_len:
         cls = cls_cycle[cycle_idx % len(cls_cycle)]
-        if pools[cls]:                                         # still something left?
+        if pools[cls]:  # still something left?
             selected_indices.append(pools[cls].pop(0))
         # Break if no class has anything left
         if all(len(p) == 0 for p in pools.values()):
@@ -146,17 +162,18 @@ def get_predicted_samples(
 
     if len(selected_indices) < target_len:
         # Optional: log/print a warning in your own logger
-        print(f"[get_predicted_samples] Warning: could only gather "
-              f"{len(selected_indices)} / {target_len} samples "
-              f"because X_test is exhausted.")
+        print(
+            f"[get_predicted_samples] Warning: could only gather "
+            f"{len(selected_indices)} / {target_len} samples "
+            f"because X_test is exhausted."
+        )
 
     # ── 6. Final arrays ────────────────────────────────────────────────────────
     selected_indices = np.asarray(selected_indices, dtype=int)
-    X_samples        = X_test[selected_indices]
-    y_pred_samples   = y_pred[selected_indices]
+    X_samples = X_test[selected_indices]
+    y_pred_samples = y_pred[selected_indices]
 
     return X_samples, y_pred_samples
-
 
 
 def save_multivariate_ts_as_csv(file_path, X, y):
@@ -168,9 +185,13 @@ def save_multivariate_ts_as_csv(file_path, X, y):
     :param y: 1D array of labels.
     """
     n_samples, n_time_steps, n_features = X.shape
-    reshaped_X = X.reshape(n_samples * n_time_steps, n_features)  # Flatten time dimension
+    reshaped_X = X.reshape(
+        n_samples * n_time_steps, n_features
+    )  # Flatten time dimension
     sample_ids = [[i] * n_time_steps for i in range(n_samples)]  # Assign sample ID
-    time_steps = [list(range(n_time_steps)) for _ in range(n_samples)]  # Assign time step index
+    time_steps = [
+        list(range(n_time_steps)) for _ in range(n_samples)
+    ]  # Assign time step index
 
     df = pd.DataFrame(reshaped_X, columns=[f"feature_{i}" for i in range(n_features)])
     df.insert(0, "sample_id", sum(sample_ids, []))
@@ -181,7 +202,10 @@ def save_multivariate_ts_as_csv(file_path, X, y):
 
     df.to_csv(file_path, index=False)
     labels_df.to_csv(file_path.replace(".csv", "_labels.csv"), index=False)
-    print(f"Saved dataset to {file_path} and labels to {file_path.replace('.csv', '_labels.csv')}")
+    print(
+        f"Saved dataset to {file_path} and labels to {file_path.replace('.csv', '_labels.csv')}"
+    )
+
 
 def load_multivariate_ts_from_csv(file_path):
     """
@@ -207,8 +231,6 @@ def load_multivariate_ts_from_csv(file_path):
 
     return X, y
 
+
 def array_to_string(arr):
-    return ' '.join(map(str, arr.flatten()))
-
-
-
+    return " ".join(map(str, arr.flatten()))

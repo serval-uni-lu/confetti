@@ -6,7 +6,11 @@ from tqdm import tqdm
 from pathlib import Path
 
 from confetti import CONFETTI
-from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv, array_to_string
+from confetti.explainer.utils import (
+    load_data,
+    load_multivariate_ts_from_csv,
+    array_to_string,
+)
 import confetti.CAM.class_activation_map as cam
 from benchmark.evaluations.evaluator import Evaluator
 
@@ -34,8 +38,13 @@ def _flag_sets_at_least_two_true() -> List[Dict[str, bool]]:
         (True, False, True): 2,
         (False, True, True): 3,
     }
-    combos.sort(key=lambda d: priority[(d["optimize_confidence"], d["optimize_sparsity"], d["optimize_proximity"])])
+    combos.sort(
+        key=lambda d: priority[
+            (d["optimize_confidence"], d["optimize_sparsity"], d["optimize_proximity"])
+        ]
+    )
     return combos
+
 
 def _label_from_flags(flags: Dict[str, bool]) -> str:
     """Create a short label like 'conf_spar_prox' or 'conf_spar' from True flags."""
@@ -48,6 +57,7 @@ def _label_from_flags(flags: Dict[str, bool]) -> str:
         parts.append("PR")
     return "_".join(parts)
 
+
 def run_objectives_experiment(model_name: str = "fcn"):
     base_dir = Path(__file__).parent
     results_dir = base_dir / "objectives_summary"
@@ -55,24 +65,34 @@ def run_objectives_experiment(model_name: str = "fcn"):
 
     for dataset in tqdm(cfg.DATASETS, desc="Datasets", unit="dataset"):
         sample_file = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
-        model_path = str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras")
+        model_path = str(
+            cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras"
+        )
 
         X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
         model = keras.models.load_model(model_path)
 
         X_train, _, y_train, _ = load_data(dataset, one_hot=False)
 
-        training_weights = cam.compute_weights_cam(model=model,
-                                                   X_data=X_train,
-                                                   dataset=dataset,
-                                                   save_weights=False,
-                                                   data_type='training')
+        training_weights = cam.compute_weights_cam(
+            model=model,
+            X_data=X_train,
+            dataset=dataset,
+            save_weights=False,
+            data_type="training",
+        )
 
         explainer = CONFETTI(model_path=model_path)
         evaluator = Evaluator()
 
-        #for combo in tqdm(_flag_sets_at_least_two_true(), desc="Objective Combos", unit="combo"):
-        for combo in [{'optimize_confidence': False, 'optimize_sparsity': True, 'optimize_proximity': True}]:
+        # for combo in tqdm(_flag_sets_at_least_two_true(), desc="Objective Combos", unit="combo"):
+        for combo in [
+            {
+                "optimize_confidence": False,
+                "optimize_sparsity": True,
+                "optimize_proximity": True,
+            }
+        ]:
             label = _label_from_flags(combo)
             start_time = time.time()
             ces_naive, ces_optimized = explainer.parallelized_counterfactual_generator(
@@ -81,7 +101,7 @@ def run_objectives_experiment(model_name: str = "fcn"):
                 reference_weights=training_weights,
                 alpha=0.5,
                 theta=0.51,
-                proximity_distance='dtw',
+                proximity_distance="dtw",
                 processes=8,
                 verbose=False,
                 **combo,
@@ -100,7 +120,7 @@ def run_objectives_experiment(model_name: str = "fcn"):
                 channels=X_train.shape[2],
                 alpha=True,
                 param_config=0.5,
-                fallback_counterfactuals=ces_naive
+                fallback_counterfactuals=ces_naive,
             )
             dataset_summary["Computation Time"] = total_time
             summary.append(dataset_summary)
@@ -109,18 +129,22 @@ def run_objectives_experiment(model_name: str = "fcn"):
             ces_naive.to_csv(results_dir / f"{dataset}_{label}_naive.csv", index=False)
 
             ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
-            ces_optimized.to_csv(results_dir / f"{dataset}_{label}_optimized.csv", index=False)
-
+            ces_optimized.to_csv(
+                results_dir / f"{dataset}_{label}_optimized.csv", index=False
+            )
 
     df_summary = pd.concat(summary, ignore_index=True, sort=True)
-    df_summary.to_csv(results_dir / "objectives_experiment_results_SR_PR.csv", index=False)
+    df_summary.to_csv(
+        results_dir / "objectives_experiment_results_SR_PR.csv", index=False
+    )
 
 
 def main():
     warnings.filterwarnings("ignore")
-    tf.get_logger().setLevel('ERROR')
+    tf.get_logger().setLevel("ERROR")
     from pymoo.config import Config
-    Config.warnings['not_compiled'] = False
+
+    Config.warnings["not_compiled"] = False
 
     run_objectives_experiment(model_name="fcn")
 

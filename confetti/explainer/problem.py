@@ -5,24 +5,27 @@ from confetti.explainer.errors import CONFETTIConfigurationError
 from tslearn.metrics import TSLEARN_VALID_METRICS
 import importlib
 
-#TODO: Delete prints in proximity function.
+# TODO: Delete prints in proximity function.
+
 
 class CounterfactualProblem(Problem):
-    def __init__(self,
-                 original_instance: np.array,
-                 nun_instance: np.array,
-                 nun_index: int,
-                 start_timestep: int,
-                 subsequence_length: int,
-                 classifier,
-                 reference_labels: np.array,
-                 optimize_confidence: bool = True,
-                 optimize_sparsity: bool = True,
-                 optimize_proximity: bool = False,
-                 proximity_distance: str = "euclidean",
-                 dtw_window: Optional[int] = None,
-                 alpha: float = 0.5,
-                 theta: float = 0.51):
+    def __init__(
+        self,
+        original_instance: np.array,
+        nun_instance: np.array,
+        nun_index: int,
+        start_timestep: int,
+        subsequence_length: int,
+        classifier,
+        reference_labels: np.array,
+        optimize_confidence: bool = True,
+        optimize_sparsity: bool = True,
+        optimize_proximity: bool = False,
+        proximity_distance: str = "euclidean",
+        dtw_window: Optional[int] = None,
+        alpha: float = 0.5,
+        theta: float = 0.51,
+    ):
         """
         Define a multi-objective optimization problem for generating counterfactuals
         using a perturbed subsequence of the original time series instance.
@@ -91,8 +94,12 @@ class CounterfactualProblem(Problem):
         self.dtw_window = dtw_window
         self.alpha = alpha
         self.theta = theta
-        n_var: int = original_instance.shape[1] * (self.subsequence_length)  # Here, shape[1] are the no. of channels
-        n_obj: int = int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
+        n_var: int = original_instance.shape[1] * (
+            self.subsequence_length
+        )  # Here, shape[1] are the no. of channels
+        n_obj: int = (
+            int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
+        )
 
         super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=1)
 
@@ -110,31 +117,38 @@ class CounterfactualProblem(Problem):
 
         # Extract the patch to replace from nun_instance (shared for all samples)
         replacement_patch = self.nun_instance[
-                            self.start_timestep:self.end_timestep]  # shape: (subsequence_length, n_features)
+            self.start_timestep : self.end_timestep
+        ]  # shape: (subsequence_length, n_features)
 
         # Broadcast replacement_patch to match number of samples
-        replacement_patch_broadcasted = np.broadcast_to(replacement_patch,
-                                                        (n_samples, self.subsequence_length, n_features))
+        replacement_patch_broadcasted = np.broadcast_to(
+            replacement_patch, (n_samples, self.subsequence_length, n_features)
+        )
 
         # Apply mask-based replacement
-        counterfactuals[:, self.start_timestep:self.end_timestep, :] = (
-            np.where(x_reshaped, replacement_patch_broadcasted,
-                     counterfactuals[:, self.start_timestep:self.end_timestep, :])
+        counterfactuals[:, self.start_timestep : self.end_timestep, :] = np.where(
+            x_reshaped,
+            replacement_patch_broadcasted,
+            counterfactuals[:, self.start_timestep : self.end_timestep, :],
         )
 
         f1, f2, f3 = None, None, None
 
-        f1 = self.classifier.predict(counterfactuals)[:, self.reference_labels[self.nun_index]]
+        f1 = self.classifier.predict(counterfactuals)[
+            :, self.reference_labels[self.nun_index]
+        ]
         out["G"] = [self.theta - f1]
 
         if self.optimize_sparsity:
             f2 = np.sum(x_reshaped, axis=(1, 2))
 
         if self.optimize_proximity:
-            f3 = self._proximity(counterfactuals = counterfactuals,
-                             original_instance=self.original_instance,
-                             metric=self.proximity_distance,
-                             dtw_window=self.dtw_window)
+            f3 = self._proximity(
+                counterfactuals=counterfactuals,
+                original_instance=self.original_instance,
+                metric=self.proximity_distance,
+                dtw_window=self.dtw_window,
+            )
 
         objective_values = []
         if self.optimize_confidence and self.optimize_sparsity:
@@ -151,11 +165,13 @@ class CounterfactualProblem(Problem):
 
         out["F"] = np.row_stack(objective_values).T
 
-
-    def _proximity(self, counterfactuals: np.ndarray,
-                   original_instance: np.ndarray,
-                   metric: str = "euclidean",
-                   dtw_window: Optional[int] = None) -> np.ndarray:
+    def _proximity(
+        self,
+        counterfactuals: np.ndarray,
+        original_instance: np.ndarray,
+        metric: str = "euclidean",
+        dtw_window: Optional[int] = None,
+    ) -> np.ndarray:
         """
         Calculate the proximity of the counterfactuals to the original instance
         using the specified distance metric.
@@ -180,16 +196,23 @@ class CounterfactualProblem(Problem):
         """
         metric_name = metric.lower()
         if metric_name == "euclidean":
-            return np.sqrt(np.sum((counterfactuals - original_instance[None, :, :]) ** 2, axis=(1, 2)))
+            return np.sqrt(
+                np.sum(
+                    (counterfactuals - original_instance[None, :, :]) ** 2, axis=(1, 2)
+                )
+            )
         else:
-            tslearn_distance_function = self._select_tslearn_distance_function(metric_name=metric_name)
+            tslearn_distance_function = self._select_tslearn_distance_function(
+                metric_name=metric_name
+            )
 
         X = counterfactuals  # (N, T, C)
         Y = original_instance[None, :, :]  # (1, T, C)
 
         if metric_name == "dtw" and dtw_window is not None and dtw_window > 0:
             distances = tslearn_distance_function(
-                X, Y,
+                X,
+                Y,
                 global_constraint="sakoe_chiba",
                 sakoe_chiba_radius=int(dtw_window),
             )
