@@ -5,14 +5,14 @@ import time
 from tqdm import tqdm
 from pathlib import Path
 
-from confetti import CONFETTI
-from confetti.explainer.utils import (
+from src.confetti import CONFETTI
+from src.confetti.utils import (
     load_data,
     load_multivariate_ts_from_csv,
     array_to_string,
 )
-import confetti.CAM.class_activation_map as cam
-from benchmark.evaluations.evaluator import Evaluator
+import paper.CAM.class_activation_map as cam
+from paper.benchmark.evaluations.evaluator import Evaluator
 
 import config as cfg
 

@@ -1,10 +1,9 @@
-from typing import Sequence, Iterable, Optional, Tuple
+from typing import Optional, Tuple
 import pandas as pd
 import numpy as np
 from tslearn.metrics import dtw
 from tslearn.neighbors import KNeighborsTimeSeries
-from sklearn.preprocessing import MinMaxScaler
-from confetti.explainer.utils import (
+from src.confetti.utils import (
     load_data,
     convert_string_to_array,
     load_multivariate_ts_from_csv,

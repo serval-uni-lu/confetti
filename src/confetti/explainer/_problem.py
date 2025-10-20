@@ -1,8 +1,6 @@
 from pymoo.core.problem import Problem
 from typing import Optional
 import numpy as np
-from confetti.explainer.errors import CONFETTIConfigurationError
-from tslearn.metrics import TSLEARN_VALID_METRICS
 import importlib
 
 # TODO: Delete prints in proximity function.

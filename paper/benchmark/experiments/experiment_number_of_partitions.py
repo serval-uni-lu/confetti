@@ -1,10 +1,9 @@
-from confetti import CONFETTI
-from confetti.explainer.utils import (
+from src.confetti import CONFETTI
+from src.confetti.utils import (
     load_multivariate_ts_from_csv,
     load_data,
-    convert_string_to_array,
 )
-from confetti.CAM import compute_weights_cam
+from paper.CAM import compute_weights_cam
 import pandas as pd
 import numpy as np
 import config as cfg
@@ -47,7 +46,6 @@ def run_experiment(model_name: str = "fcn"):
         data_type="training",
     )
     exp = CONFETTI(model_path=model_path)
-    ce_dir = cfg.RESULTS_DIR / dataset
     # Create a dict to store results
     results = {"Partitions": [], "Execution Time": [], "Sparsity": [], "Confidence": []}
     for partition in partitions:

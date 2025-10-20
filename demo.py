@@ -1,15 +1,8 @@
 import config as cfg
 import keras
-import warnings
-import confetti.CAM.class_activation_map as cam
-from confetti.explainer.confetti_explainer import CONFETTI
-from confetti.explainer.utils import (
-    load_data,
-    load_multivariate_ts_from_csv,
-    array_to_string,
-)
-import tensorflow as tf
-import pandas as pd
+import paper.CAM.class_activation_map as cam
+from src.confetti.explainer.confetti_explainer import CONFETTI
+from confetti import CONFETTI, load_data, load_multivariate_ts_from_csv, array_to_string
 
 
 def run_demo(
@@ -57,7 +50,7 @@ def run_demo(
         proximity_distance=proximity_distance,
         dtw_window=dtw_window,
         processes=6,
-        verbose=False,
+        verbose=True,
     )
 
     ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
@@ -75,22 +68,7 @@ def run_demo(
 
 
 def main():
-    warnings.filterwarnings("ignore")
-    tf.get_logger().setLevel("ERROR")
-
-    distance = "dtw"  # user choice
-    import importlib
-
-    try:
-        metrics_module = importlib.import_module("tslearn.metrics")
-        # getattr fetches function by name if it exists
-        metric_fn = getattr(metrics_module, distance)
-        print("Success!")
-    except (ImportError, AttributeError) as e:
-        raise ImportError(
-            f"Metric '{distance}' not found in tslearn. "
-            "Make sure tslearn is installed and the metric exists."
-        ) from e
+    run_demo()
 
 
 if __name__ == "__main__":

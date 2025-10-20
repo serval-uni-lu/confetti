@@ -873,7 +873,7 @@ def compare_counterfactuals(
 
 def main():
     df = pd.read_csv(
-        "/Users/alan.paredes/Desktop/confetti/benchmark/evaluations/all_evaluation_results.csv"
+        "/benchmark/evaluations/all_evaluation_results.csv"
     )
     column_order = [
         "Explainer",
@@ -895,8 +895,8 @@ def main():
     confetti_results = results[
         results["Explainer"].str.contains("confetti", case=False, na=False)
     ]
-    results_alphas = confetti_results[confetti_results["Alpha"] == True]
-    results_thetas = confetti_results[confetti_results["Alpha"] == False]
+    results_alphas = confetti_results[confetti_results["Alpha"]]
+    results_thetas = confetti_results[not confetti_results["Alpha"]]
     # Create boxplots for the trade-offs
     boxplot_all_tradeoffs(results_alphas, results_thetas)
 

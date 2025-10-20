@@ -6,7 +6,7 @@ import tensorflow as tf
 import numpy as np
 import time
 from pathlib import Path
-from models.utils import save_logs, calculate_metrics
+from paper.models.utils import save_logs, calculate_metrics
 
 
 class ClassifierRESNET:

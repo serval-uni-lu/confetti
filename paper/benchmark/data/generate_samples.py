@@ -1,6 +1,6 @@
 import os
 import keras
-from confetti.explainer.utils import (
+from src.confetti.utils import (
     load_data,
     save_multivariate_ts_as_csv,
     get_predicted_samples,

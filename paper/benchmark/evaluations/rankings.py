@@ -2,7 +2,6 @@ from typing import Tuple
 
 import pandas as pd
 import numpy as np
-from pingouin import friedman
 import scikit_posthocs as sp
 import config as cfg
 from sklearn.preprocessing import MinMaxScaler

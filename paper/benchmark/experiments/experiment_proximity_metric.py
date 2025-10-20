@@ -2,16 +2,16 @@ import config as cfg
 from pathlib import Path
 import keras
 import warnings
-import confetti.CAM.class_activation_map as cam
-from confetti.explainer.confetti_explainer import CONFETTI
-from confetti.explainer.utils import (
+import paper.CAM.class_activation_map as cam
+from src.confetti.explainer.confetti_explainer import CONFETTI
+from src.confetti.utils import (
     load_data,
     load_multivariate_ts_from_csv,
     array_to_string,
 )
 import tensorflow as tf
 import pandas as pd
-from benchmark.evaluations.evaluator import Evaluator
+from paper.benchmark.evaluations.evaluator import Evaluator
 import time
 from tqdm import tqdm
 

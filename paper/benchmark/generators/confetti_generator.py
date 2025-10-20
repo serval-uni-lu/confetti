@@ -1,10 +1,9 @@
 import config as cfg
 import keras
-from pathlib import Path
 import warnings
-import confetti.CAM.class_activation_map as cam
-from confetti.explainer.confetti_explainer import CONFETTI
-from confetti.explainer.utils import (
+import paper.CAM.class_activation_map as cam
+from src.confetti.explainer.confetti_explainer import CONFETTI
+from src.confetti.utils import (
     load_data,
     load_multivariate_ts_from_csv,
     array_to_string,
@@ -14,7 +13,6 @@ import pandas as pd
 from tqdm import tqdm
 import time
 import json
-import numpy as np
 
 tf.keras.utils.disable_interactive_logging()
 warnings.filterwarnings("ignore", category=FutureWarning)

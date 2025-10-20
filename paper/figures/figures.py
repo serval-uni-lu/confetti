@@ -1,13 +1,15 @@
 import pandas as pd
 import config as cfg
 from pathlib import Path
-from confetti.explainer.utils import (
+from src.confetti.utils import (
     load_data,
     load_multivariate_ts_from_csv,
     convert_string_to_array,
 )
-from confetti.CAM import compute_weights_cam
+from paper.CAM import compute_weights_cam
 import keras
+from visualizer import boxplot_all_tradeoffs_by_model
+from visualizer import plot_method_comparison_with_cam
 
 results = pd.read_csv(
     Path.cwd().parent / "benchmark" / "evaluations" / "all_evaluation_results.csv"
@@ -152,7 +154,7 @@ sample = X_samples[0]
 
 ## Figure 1. Comparison of Counterfactual Explanations for MTS by different methods.
 
-from visualizer import plot_method_comparison_with_cam
+
 
 plot_method_comparison_with_cam(
     sample,
@@ -167,9 +169,8 @@ plot_method_comparison_with_cam(
 confetti_results = results[
     results["Explainer"].str.contains("Confetti Optimized", case=False, na=False)
 ]
-results_alphas = confetti_results[confetti_results["Alpha"] == True]
-results_thetas = confetti_results[confetti_results["Alpha"] == False]
+results_alphas = confetti_results[confetti_results["Alpha"]]
+results_thetas = confetti_results[not confetti_results["Alpha"]]
 
-from visualizer import boxplot_all_tradeoffs_by_model
 
 boxplot_all_tradeoffs_by_model(results_alphas, results_thetas)

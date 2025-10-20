@@ -1,12 +1,11 @@
 from visualizer import plot_counterfactual_with_cam
-from confetti.explainer.utils import convert_string_to_array
+from src.confetti.utils import convert_string_to_array
 import pandas as pd
 from pathlib import Path
 
 
 def exploratory_images():
     dataset = "BasicMotions"
-    model_name = "fcn"
     counterfactuals_path = (
         Path.cwd().parent / "benchmark" / "experiments" / "proximity_metric_results"
     )

@@ -4,11 +4,9 @@ import pandas as pd
 import time
 import tensorflow as tf
 from tqdm import tqdm
-from pathlib import Path
 from TSInterpret.InterpretabilityModels.counterfactual.COMTECF import COMTECF
-from confetti.explainer.utils import (
+from src.confetti.utils import (
     load_data,
-    get_samples,
     load_multivariate_ts_from_csv,
     array_to_string,
 )

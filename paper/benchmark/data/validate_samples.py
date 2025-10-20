@@ -1,6 +1,6 @@
 import os
 import config as cfg
-from confetti.explainer.utils import (
+from src.confetti.utils import (
     load_data,
     get_samples,
     load_multivariate_ts_from_csv,

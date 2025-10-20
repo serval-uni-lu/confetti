@@ -6,9 +6,9 @@ affect the execution time of the counterfactual generation process.
 import config as cfg
 import keras
 import warnings
-import confetti.CAM.class_activation_map as cam
-from confetti.explainer.confetti_explainer import CONFETTI
-from confetti.explainer.utils import load_data, load_multivariate_ts_from_csv
+import paper.CAM.class_activation_map as cam
+from src.confetti.explainer.confetti_explainer import CONFETTI
+from src.confetti.utils import load_data, load_multivariate_ts_from_csv
 import tensorflow as tf
 import pandas as pd
 import time
