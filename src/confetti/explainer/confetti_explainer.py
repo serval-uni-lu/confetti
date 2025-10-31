@@ -1,8 +1,9 @@
-from src.confetti.utils import array_to_string
-from src.confetti._errors import CONFETTIConfigurationError
+from confetti.errors import CONFETTIConfigurationError
+from confetti.explainer._problem import CounterfactualProblem
+from confetti.explainer.counterfactuals import Counterfactual, CounterfactualSet, CounterfactualResults
 
 import time
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Union
 import warnings
 import copy
 from pathlib import Path
@@ -20,7 +21,6 @@ from pymoo.operators.crossover.pntx import TwoPointCrossover
 from pymoo.operators.mutation.bitflip import BitflipMutation
 from pymoo.operators.sampling.rnd import BinaryRandomSampling
 from pymoo.termination import get_termination
-from ._problem import CounterfactualProblem
 
 from multiprocessing import Pool
 from functools import partial
@@ -48,38 +48,6 @@ class CONFETTI:
         self.weights: Optional[np.array] = None
         self.nuns: List[int] = []
 
-    @staticmethod
-    def _findsubarray(w: list, k: int) -> int:
-        """
-        Identify the starting index of the contiguous subsequence of length ``k`` in the list ``w``
-        that has the maximum total sum.
-
-        This method performs a linear scan using a sliding window approach to efficiently find
-        the most "important" region of the input signal, where ``w`` represents feature attribution weights
-         (e.g. Class Activation Map weights)
-
-        Parameters:
-        ----------
-        ``w`` : list
-            A list of importance weights (e.g., CAM values) for each time step of the NUN.
-        ``k`` : int
-            Desired length of the subsequence.
-
-        Returns:
-        -------
-        int
-            Starting index of the contiguous subsequence of length `k` with the highest total weight.
-        """
-        start = 0
-        max_sum = curr_sum = sum(w[start : start + k])
-        for i in range(1, len(w) - k + 1):
-            curr_sum -= w[i - 1]
-            curr_sum += w[i + k - 1]
-            if curr_sum > max_sum:
-                max_sum = curr_sum
-                start = i
-        return start
-
     def _nearest_unlike_neighbour(
         self,
         query: np.array,
@@ -88,7 +56,7 @@ class CONFETTI:
         dtw_window: Optional[int] = None,
         n_neighbors: int = 1,
         theta: float = 0.51,
-    ) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    ) -> None | int:
         """
         Find the Nearest Unlike Neighbour (NUN) of a given instance based on a distance metric
         and a minimum confidence constraint.
@@ -100,26 +68,22 @@ class CONFETTI:
 
         Parameters:
         ----------
-        query : np.array
+        ``query`` : np.array
             The instance to be explained, shaped (timesteps, dimensions).
-        predicted_label : int
+        ``predicted_label`` : int
             The predicted class label of the query instance (e.g., obtained via `np.argmax(model.predict(...))`).
-        distance : str, default="euclidean"
+        ``distance`` : str, default="euclidean"
             Distance metric to use for k-NN search. Must be compatible with `KNeighborsTimeSeries`.
-        n_neighbors : int, default=1
+        ``n_neighbors`` : int, default=1
             Number of nearest neighbors to retrieve.
-        theta : float, default=0.51
+        ``theta`` : float, default=0.51
             Minimum predicted probability required for a neighbor to be considered valid.
 
         Returns:
         -------
-        tuple[Optional[np.ndarray], Optional[np.ndarray]]
-            - distances : np.ndarray of shape (≤ n_neighbors,)
-                Distances from the query to valid unlike neighbors.
-            - indices : np.ndarray of shape (≤ n_neighbors,)
-                Indices in the reference dataset of the valid unlike neighbors.
-
-            Returns (None, None) if no unlike neighbors meet the confidence threshold.
+        ``nun_index`` : None | int
+            Index of the nearest unlike neighbor in the reference dataset that meets
+            the confidence threshold. Returns None if no such neighbor is found.
         """
 
         # Label DataFrame
@@ -160,13 +124,15 @@ class CONFETTI:
         # Filter by confidence threshold
         keep_mask = confidences >= theta
         if not any(keep_mask):
-            return None, None
+            return None
 
-        # Return filtered distances and corresponding indices
-        final_distances = dist[0][keep_mask]
         final_indices = actual_indices[keep_mask]
 
-        return final_distances, final_indices
+        if len(final_indices) == 0:
+            return None
+        else:
+            nun_index = final_indices[0]
+            return nun_index
 
     def _naive_stage(
         self,
@@ -176,7 +142,7 @@ class CONFETTI:
         subarray_length: int = 1,
         theta: float = 0.51,
         verbose: bool = False,
-    ) -> pd.DataFrame:
+    ) -> Tuple[Counterfactual, int]:
         """
         Generate a naive counterfactual by replacing a subsequence of the original instance
         with the corresponding subsequence from its nearest unlike neighbor (NUN).
@@ -202,18 +168,21 @@ class CONFETTI:
 
         Returns:
         -------
-        pd.DataFrame
-            DataFrame containing the counterfactual solution, window size, test instance index,
-            NUN instance index, and the predicted class label of the counterfactual.
+        ``counterfactual`` : Counterfactual
+            Object containing the counterfactual solution
+            and the predicted class label of the counterfactual.
+
+        ``subarray_length`` : int
+            Length of the subsequence used to generate the counterfactual.
         """
 
         # Initialize values
         if verbose:
             print(f"Naive stage started for instance {instance_index}")
 
-        starting_point = self._findsubarray(w=self.weights[nun_index], k=subarray_length)
+        starting_point : int = self._findsubarray(w=self.weights[nun_index], k=subarray_length)
 
-        counterfactual = np.concatenate(
+        perturbed_instance : np.ndarray = np.concatenate(
             (
                 self.instances_to_explain[instance_index][:starting_point],
                 (
@@ -226,22 +195,22 @@ class CONFETTI:
                 ],
             )
         )
+        perturbed_instance_reshaped = perturbed_instance.reshape(
+            1, perturbed_instance.shape[0], perturbed_instance.shape[1]
+        )
 
-        # Obtain prediction probability of target class
-        prob_target = model.predict(
-            counterfactual.reshape(1, counterfactual.shape[0], counterfactual.shape[1]),
+        prob_target = model.predict(perturbed_instance_reshaped,
             verbose=0,
         )[0][self.reference_labels[nun_index]]
 
         while prob_target <= theta:
             subarray_length += 1
-            # Timestep where it starts
-            starting_point = self._findsubarray(
+
+            starting_point : int = self._findsubarray(
                 w=self.weights[nun_index], k=subarray_length
             )
 
-            # Create the counterfactual by swapping the original instance's values for the NUN's.
-            counterfactual = np.concatenate(
+            perturbed_instance = np.concatenate(
                 (
                     self.instances_to_explain[instance_index][:starting_point],
                     (
@@ -255,36 +224,23 @@ class CONFETTI:
                 )
             )
 
-            # Feed new instance to model and check if the probability target changed.
-            counterfactual_reshaped = counterfactual.reshape(
-                1, counterfactual.shape[0], counterfactual.shape[1]
+            perturbed_instance_reshaped = perturbed_instance.reshape(
+                1, perturbed_instance.shape[0], perturbed_instance.shape[1]
             )
-            prob_target = model.predict(counterfactual_reshaped, verbose=0)[0][
-                self.reference_labels[nun_index]
-            ]
 
-        ce_label = np.argmax(
-            model.predict(
-                counterfactual.reshape(
-                    1, counterfactual.shape[0], counterfactual.shape[1]
-                ),
-                verbose=0,
-            ),
-            axis=1,
-        )
+            prob_target = model.predict(perturbed_instance_reshaped, verbose=0)[0][self.reference_labels[nun_index]]
+
+        ce_label = np.argmax(model.predict(perturbed_instance_reshaped,verbose=0,),axis=1,)
 
         if verbose:
             print(f"Naive stage finished for instance {instance_index}")
 
-        counterfactual_dict = {
-            "Solution": [counterfactual],
-            "Window": subarray_length,
-            "Test Instance": instance_index,
-            "NUN Instance": nun_index,
-            "CE Label": ce_label[0],
-        }
-        counterfactual_df = pd.DataFrame(counterfactual_dict)
-        return counterfactual_df
+        counterfactual : Counterfactual = Counterfactual(
+            counterfactual=perturbed_instance_reshaped,
+            label=ce_label[0],
+        )
+
+        return counterfactual, subarray_length
 
     def _optimization(
         self,
@@ -305,7 +261,7 @@ class CONFETTI:
         proximity_distance: str = "euclidean",
         dtw_window: Optional[int] = None,
         verbose: bool = False,
-    ) -> pd.DataFrame:
+    ) -> CounterfactualSet:
         """
         Perform counterfactual optimization for a single instance.
 
@@ -357,9 +313,9 @@ class CONFETTI:
 
         Returns:
         -------
-        pd.DataFrame
-            DataFrame containing the optimized counterfactual solutions, including the solution array,
-            window size, test instance index, NUN instance index, and the predicted class label of the counterfactual.
+        CounterfactualSet
+            A CounterfactualSet object containing the original instance, original label, NUN,
+            the best solution according to alpha, and all generated counterfactuals during optimization.
         """
 
         # Validate that there are at least two objectives to optimize
@@ -372,19 +328,17 @@ class CONFETTI:
                 "Set `optimize_confidence`, `optimize_sparsity`, or `optimize_proximity` to True."
             )
 
-        # Initialize Values
-        query = self.instances_to_explain[instance_index]
 
-        nun = copy.deepcopy(self.reference_data[nun_index])
-        solutions = pd.DataFrame(
-            columns=["Solution", "Window", "Test Instance", "NUN Instance", "CE Label"]
-        )
+        query: np.ndarray = self.instances_to_explain[instance_index]
+        nun : np.ndarray = copy.deepcopy(self.reference_data[nun_index])
+        all_counterfactuals: List[Counterfactual] = []
 
-        # Start Optimization Search
+
         high = subsequence_length
         low = 1
         if verbose:
             print(f"Optimization of CE for Instance {instance_index} started.")
+
         while low <= high:
             start_time = time.time()
             window = (low + high) // 2
@@ -392,6 +346,7 @@ class CONFETTI:
                 print(
                     f"Optimization of CE for Instance {instance_index} in Window {window}"
                 )
+
             # Timestep where it starts
             if self.weights is None:
                 starting_point = 0
@@ -399,7 +354,6 @@ class CONFETTI:
                 starting_point = self._findsubarray((self.weights[nun_index]), window)
             end_point = starting_point + window
 
-            # Define the Counterfactual Problem
             problem = CounterfactualProblem(
                 original_instance=query,
                 nun_instance=nun,
@@ -417,52 +371,47 @@ class CONFETTI:
                 theta=theta,
             )
 
-            # create the reference directions to be used for the optimization in NSGA3
-            ref_dirs = get_reference_directions(
-                "das-dennis", n_dim=number_of_objectives, n_partitions=n_partitions
+            reference_directions = get_reference_directions(
+                name="das-dennis",
+                n_dim=number_of_objectives,
+                n_partitions=n_partitions
             )
 
-            # NSGA-III Algorithm
             algorithm = NSGA3(
                 pop_size=population_size,
-                ref_dirs=ref_dirs,
+                ref_dirs=reference_directions,
                 sampling=BinaryRandomSampling(),
                 crossover=TwoPointCrossover(prob=crossover_probability),
                 mutation=BitflipMutation(prob=mutation_probability),
             )
 
-            # Only do 100 generations
             termination = get_termination("n_gen", maximum_number_of_generations)
 
-            # Run Optimization
-            res = minimize(problem, algorithm, termination, seed=1, verbose=False)
+            result = minimize(problem, algorithm, termination, seed=1, verbose=False)
 
-            # Check if the optimization actually gave a solution
-            if res.X is None:
+            if result.X is None:
                 low = window + 1
             else:
-                for x in res.X:
-                    x_reshaped = res.X[0].reshape(window, query.shape[1])
-                    op_counterfactual = np.copy(query)
-                    op_counterfactual[starting_point:end_point][x_reshaped] = nun[
+                for perturbation in result.X:
+                    perturbation_reshaped : np.ndarray = perturbation.reshape(window, query.shape[1])
+                    perturbed_instance : np.ndarray = np.copy(query)
+                    perturbed_instance[starting_point:end_point][perturbation_reshaped] = nun[
                         starting_point:end_point
-                    ][x_reshaped]
+                    ][perturbation_reshaped]
 
-                    op_counterfactual_reshaped = op_counterfactual.reshape(
-                        1, op_counterfactual.shape[0], op_counterfactual.shape[1]
+                    perturbed_instance_reshaped = perturbed_instance.reshape(
+                        1, perturbed_instance.shape[0], perturbed_instance.shape[1]
                     )
-                    ce_label = np.argmax(
-                        model.predict(op_counterfactual_reshaped, verbose=False), axis=1
+                    counterfactual_label = np.argmax(
+                        model.predict(perturbed_instance_reshaped, verbose=False), axis=1
                     )
-                    row_dict = {
-                        "Solution": [op_counterfactual],
-                        "Window": window,
-                        "Test Instance": instance_index,
-                        "NUN Instance": nun_index,
-                        "CE Label": ce_label[0],
-                    }
-                    row_df = pd.DataFrame(row_dict)
-                    solutions = pd.concat([solutions, row_df], ignore_index=True)
+
+                    counterfactual : Counterfactual = Counterfactual(
+                        counterfactual = perturbed_instance_reshaped,
+                        label = counterfactual_label[0]
+                    )
+
+                    all_counterfactuals.append(counterfactual)
 
                 high = window - 1
             final_time = time.time() - start_time
@@ -472,7 +421,22 @@ class CONFETTI:
                 )
         if verbose:
             print(f"Optimization of CE for Instance {instance_index} finished.")
-        return solutions
+
+        # TODO: Verify that best solution is correct
+        #Temporary best solution
+        best_solution = Counterfactual(
+            counterfactual = np.ndarray(1),
+            label = 1
+        )
+        counterfactuals = CounterfactualSet(
+            original_instance=query,
+            original_label = self.original_labels[instance_index],
+            nearest_unlike_neighbour=nun,
+            best_solution = best_solution,
+            all_counterfactuals=all_counterfactuals,
+        )
+
+        return counterfactuals
 
     def _one_pass(
         self,
@@ -490,7 +454,7 @@ class CONFETTI:
         proximity_distance: str = "euclidean",
         dtw_window: Optional[int] = None,
         verbose: bool = False,
-    ):
+    ) -> None | CounterfactualSet:
         """
         Execute one full counterfactual generation cycle for a single test instance.
 
@@ -535,43 +499,39 @@ class CONFETTI:
 
         Returns:
         -------
-        tuple
-            - nun : int
-                Index at the reference set of the nearest unlike neighbor.
-            - naive : pd.DataFrame
-                Counterfactual generated using the naive stage (subsequence swap).
-            - optimized : pd.DataFrame
-                Counterfactual refined via multi-objective optimization.
-            Returns (None, None, None) if no valid NUN is found for the given instance.
+        None | CounterfactualSet
+            A CounterfactualSet object containing the original instance, original label,
+            nearest unlike neighbour, the best solution according to alpha, and all generated counterfactuals.
+            Could return None if no NUN is found for the instance or if no counterfactuals are found.
         """
 
         # Load model
         model = keras.models.load_model(self.model_path)
         # Find the Nearest Unlike Neighbour
-        nun_result = self._nearest_unlike_neighbour(
+        nun_index = self._nearest_unlike_neighbour(
             query=self.instances_to_explain[test_instance],
             predicted_label=self.original_labels[test_instance],
             distance=proximity_distance,
             n_neighbors=1,
             theta=theta,
         )
-        if nun_result[0] is None:
+
+        if nun_index is None:
             if verbose:
                 warnings.warn(
                     f"No NUN found for instance {test_instance} with theta {theta}.",
                     UserWarning,
                 )
-            return None, None, None
-        else:
-            nun = int(nun_result[1][0])
+            return None
+
 
         if self.weights is None:
             if verbose:
                 print("No feature weights were found. Skipping naive stage.")
                 print(f"Optimization stage started for instance {test_instance}")
-            optimized = self._optimization(
+            counterfactual_set: None | CounterfactualSet = self._optimization(
                 instance_index=test_instance,
-                nun_index=nun,
+                nun_index=nun_index,
                 subsequence_length=self.instances_to_explain.shape[1],
                 model=model,
                 alpha=alpha,
@@ -588,12 +548,12 @@ class CONFETTI:
                 dtw_window=dtw_window,
                 verbose=verbose,
             )
-            naive = None
-            return nun, naive, optimized
+
+            return counterfactual_set
         else:
-            naive = self._naive_stage(
+            naive, subarray_length = self._naive_stage(
                 instance_index=test_instance,
-                nun_index=nun,
+                nun_index=nun_index,
                 model=model,
                 theta=theta,
                 verbose=verbose,
@@ -602,10 +562,10 @@ class CONFETTI:
                 print(f"Naive stage finished for instance {test_instance}")
                 print(f"Optimization stage started for instance {test_instance}")
 
-            optimized = self._optimization(
+            optimized: None | CounterfactualSet = self._optimization(
                 instance_index=test_instance,
-                nun_index=nun,
-                subsequence_length=naive.iloc[0]["Window"],
+                nun_index=nun_index,
+                subsequence_length=subarray_length,
                 model=model,
                 alpha=alpha,
                 theta=theta,
@@ -622,15 +582,164 @@ class CONFETTI:
                 verbose=verbose,
             )
 
-            return nun, naive, optimized
+            if optimized:
+                return optimized
+            else:
+                counterfactual_set = CounterfactualSet(
+                    original_instance=self.instances_to_explain[test_instance],
+                    original_label=self.original_labels[test_instance],
+                    nearest_unlike_neighbour=self.reference_data[nun_index],
+                    best_solution=naive,
+                    all_counterfactuals=[naive],
+                )
+                return counterfactual_set
 
-        # return nun, naive, optimized
 
-    def parallelized_counterfactual_generator(
+    def generate_counterfactuals(self,
+        instances_to_explain: np.ndarray,
+        reference_data: np.ndarray,
+        reference_weights: Optional[np.ndarray] = None,
+        alpha: float = 0.5,
+        theta: float = 0.51,
+        n_partitions: int = 12,
+        population_size: int = 100,
+        maximum_number_of_generations: int = 100,
+        crossover_probability: float = 1.0,
+        mutation_probability: float = 0.9,
+        optimize_confidence: bool = True,
+        optimize_sparsity: bool = True,
+        optimize_proximity: bool = False,
+        proximity_distance: str = "euclidean",
+        dtw_window: Optional[int] = None,
+        processes: Optional[int] = None,
+        save_counterfactuals: bool = False,
+        output_path: Optional[Union[str, Path]] = None,
+        verbose: bool = False) -> None| CounterfactualResults:
+        """
+        Generate counterfactual explanations for a set of input instances using CONFETTI.
+        This method can operate in parallel using multiple processes to speed up the generation
+        of counterfactuals for a batch of instances. Each instance is optimized independently using a genetic algorithm
+        configured by the given parameters.
+
+        Parameters:
+        ----------
+        ``instances_to_explain`` : np.ndarray
+            Array of shape (n_instances, timesteps, dimensions) containing the instances to be explained.
+        ``reference_data`` : np.ndarray
+            Array of shape (n_reference, timesteps, dimensions) containing the reference dataset.
+        ``reference_weights`` : Optional[np.ndarray], default=None
+            Array of shape (n_reference, timesteps) containing feature importance weights for the reference data.
+            If None, no weights are used in the naive stage.
+        ``alpha`` : float, default=0.5
+            Trade-off parameter between sparsity and confidence. The higher the value,
+            the more importance is given to achieving a confident prediction.
+        ``theta`` : float, default=0.51
+            Confidence threshold for selecting valid counterfactuals
+            (i.e., predicted class probability must be ≥ theta).
+        ``n_partitions`` : int, default=12
+            Number of partitions for the NSGA-III reference directions.
+        ``population_size`` : int, default=100
+            Size of the population used in the evolutionary search algorithm.
+        ``maximum_number_of_generations`` : int, default=100
+            Maximum number of generations used in the evolutionary search algorithm.
+        ``crossover_probability`` : float, default=1.0
+            Probability of applying crossover during reproduction.
+        ``mutation_probability`` : float, default=0.9
+            Probability of applying mutation during reproduction.
+        ``optimize_confidence`` : bool, default=True
+            If True, the optimization will add the objective of achieving a confident prediction for the target class.
+        ``optimize_sparsity`` : bool, default=True
+            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
+        ``optimize_proximity`` : bool, default=False
+            If True, the optimization will add the objective of minimizing the distance to the original instance.
+        ``proximity_distance`` : str, default="euclidean"
+            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
+        ``dtw_window`` : Optional[int], default=None
+            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
+        ``processes`` : Optional[int], default=None
+            Number of parallel processes to spawn. If None, no parallelization is used.
+        ``save_counterfactuals`` : bool, default=False
+            If True, saves the generated counterfactuals to a CSV file.
+        ``output_path`` : Optional[Union[str, Path]], default=None
+            Path to save the counterfactuals CSV file. If None, saves to the current directory.
+        ``verbose`` : bool, default=False
+            If True, print progress and debug information during execution.
+
+        Returns:
+        -------
+        ``counterfactual_results`` : CounterfactualResults
+            A CounterfactualResults object containing all generated counterfactual sets
+            for the input instances.
+            Can return None if no counterfactuals were generated.
+
+        """
+
+        if processes is not None:
+            self._validate_types(locals(), context="parallelization")
+        else:
+            self._validate_types(locals())
+
+        self.instances_to_explain : np.ndarray = instances_to_explain
+        self.original_labels : np.ndarray = np.argmax(self.model.predict(self.instances_to_explain, verbose=0), axis=1)
+        self.reference_data : np.ndarray = reference_data
+        self.reference_labels : np.ndarray = np.argmax(self.model.predict(self.reference_data, verbose=0), axis=1)
+        self.weights = reference_weights
+
+        results : None | CounterfactualResults = None
+
+        if processes is not None:
+            results = self._parallelized_generator(
+                alpha=alpha,
+                theta=theta,
+                n_partitions=n_partitions,
+                population_size=population_size,
+                maximum_number_of_generations=maximum_number_of_generations,
+                crossover_probability=crossover_probability,
+                mutation_probability=mutation_probability,
+                optimize_confidence=optimize_confidence,
+                optimize_sparsity=optimize_sparsity,
+                optimize_proximity=optimize_proximity,
+                proximity_distance=proximity_distance,
+                dtw_window=dtw_window,
+                processes=processes,
+                verbose=verbose,
+            )
+        else:
+            results = self._generator(
+                instances_to_explain=instances_to_explain,
+                alpha=alpha,
+                theta=theta,
+                n_partitions=n_partitions,
+                population_size=population_size,
+                maximum_number_of_generations=maximum_number_of_generations,
+                crossover_probability=crossover_probability,
+                mutation_probability=mutation_probability,
+                optimize_confidence=optimize_confidence,
+                optimize_sparsity=optimize_sparsity,
+                optimize_proximity=optimize_proximity,
+                proximity_distance=proximity_distance,
+                dtw_window=dtw_window,
+                verbose=verbose,
+            )
+
+        if results is None:
+            if verbose:
+                print("No counterfactuals were generated.")
+            return None
+        else:
+            if save_counterfactuals:
+                if output_path is not None:
+                    output_path = Path(output_path)
+                    output_path.mkdir(parents=True, exist_ok=True)
+                    results.to_csv(output_path)
+                else:
+                    results.to_csv()
+
+            return results
+
+
+    def _parallelized_generator(
         self,
-        instances_to_explain: np.array,
-        reference_data: np.array,
-        reference_weights: Optional[np.array] = None,
         alpha: float = 0.5,
         theta: float = 0.51,
         n_partitions: int = 12,
@@ -644,10 +753,8 @@ class CONFETTI:
         proximity_distance: str = "euclidean",
         dtw_window: Optional[int] = None,
         processes: int = 8,
-        save_counterfactuals: bool = False,
-        output_path: Optional[str] = None,
         verbose: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame] | Tuple[None, pd.DataFrame]:
+    ) -> None | CounterfactualResults:
         """
         Generate counterfactual explanations in parallel for a set of input instances using CONFETTI.
 
@@ -657,16 +764,6 @@ class CONFETTI:
 
         Parameters:
         ----------
-        ``instances_to_explain`` : np.array
-            A NumPy array of instances for which counterfactuals should be generated. The array should be shaped
-            (number of instances, timesteps, dimensions).
-        ``reference_data`` : np.array
-            A NumPy array of instances used as the reference set for finding nearest unlike neighbors (NUNs).
-            (e.g. the training set of the model). The array should be shaped (number of instances, timesteps, dimensions).
-        ``reference_weights`` : Optional[np.array]
-            A NumPy array containing the class activation map (CAM) weights for each instance in the reference set.
-            Each entry highlights the importance of individual time steps in the model’s class prediction.
-            Shape: (n_instances, timesteps)
         ``alpha`` : float, default=0.5
             Trade-off parameter between sparsity and confidence. The higher the value,
             the more importance is given to achieving a confident prediction.
@@ -696,39 +793,19 @@ class CONFETTI:
             Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
         ``processes`` : int, default=8
             Number of parallel processes to spawn.
-        ``save_counterfactuals`` : bool, default=False
-            Whether to save the generated counterfactuals to disk.
-        ``output_directory`` : Optional[str], optional
-            Directory path to save the counterfactuals. If None, a default path is used.
         ``verbose`` : bool, default=False
             If True, print progress and debug information during execution.
 
         Returns:
         -------
-        pd.DataFrame, pd.DataFrame
-            Two DataFrames containing the naive and optimized counterfactuals, respectively.
-            Each DataFrame includes columns for the solution array, window size, sample instance index,
-            NUN instance index from reference set , and the predicted class label of the counterfactual.
+        ``counterfactual_results`` : CounterfactualResults
+            A CounterfactualResults object containing all generated counterfactual sets
+            for the input instances.
+            Can return None if no counterfactuals were found.
         """
-        self._validate_types(locals(), context="parallelized_counterfactual_generator")
-        self.instances_to_explain = instances_to_explain
-        self.original_labels = np.argmax(
-            self.model.predict(self.instances_to_explain, verbose=0), axis=1
-        )
-        self.reference_data = reference_data
-        self.reference_labels = np.argmax(
-            self.model.predict(self.reference_data, verbose=0), axis=1
-        )
-        self.weights = reference_weights
-
-        self.naive_counterfactuals = pd.DataFrame(
-            columns=["Solution", "Window", "Test Instance", "NUN Instance"]
-        )
-        self.optimized_counterfactuals = pd.DataFrame(
-            columns=["Solution", "Window", "Test Instance", "NUN Instance"]
-        )
 
         pool = Pool(processes=processes)
+
         wrapped_one_pass = partial(
             self._one_pass,
             alpha=alpha,
@@ -750,61 +827,23 @@ class CONFETTI:
         pool.close()
         pool.join()
 
+        self.counterfactual_sets : List[CounterfactualSet]  = []
+
         for r in results:
-            nun, naive_ces, optimized_ces = r
-            self.nuns.append(nun)
-            if naive_ces is not None:
-                self.naive_counterfactuals = pd.concat(
-                    [self.naive_counterfactuals, naive_ces], ignore_index=True
-                )
-            if optimized_ces is not None:
-                self.optimized_counterfactuals = pd.concat(
-                    [self.optimized_counterfactuals, optimized_ces], ignore_index=True
-                )
-        ''' 
-        self.optimized_counterfactuals = (
-            self.optimized_counterfactuals.groupby("Test Instance", as_index=False)
-            .apply(lambda x: x.drop_duplicates(subset="Window"))
-            .reset_index(drop=True)
-        )
-        '''
+            counterfactual_set : CounterfactualSet = r
+            #self.nuns.append(nun)
+            if counterfactual_set is not None:
+                self.counterfactual_sets.append(counterfactual_set)
 
-        if save_counterfactuals:
-            # If directory is not specified, use the current one
-            output_directory = Path(output_path) if output_path else Path.cwd()
-            output_directory.mkdir(parents=True, exist_ok=True)
-
-            # Convert Solution arrays to space-separated strings for CSV compatibility
-            if not self.naive_counterfactuals.empty:
-                self.naive_counterfactuals["Solution"] = self.naive_counterfactuals[
-                    "Solution"
-                ].apply(array_to_string)
-
-            self.optimized_counterfactuals["Solution"] = self.optimized_counterfactuals[
-                "Solution"
-            ].apply(array_to_string)
-
-            # Save files as csv
-            if not self.naive_counterfactuals.empty:
-                self.naive_counterfactuals.to_csv(
-                    output_directory / "confetti_naive_counterfactuals.csv",
-                    index=False,
-                )
-            self.optimized_counterfactuals.to_csv(
-                output_directory / "confetti_optimized_counterfactuals.csv", index=False
-            )
-            print(f"Counterfactuals saved on {output_directory}")
-
-        if self.naive_counterfactuals.empty:
-            return None, self.optimized_counterfactuals
+        if self.counterfactual_sets:
+            return CounterfactualResults(counterfactual_sets=self.counterfactual_sets)
         else:
-            return self.naive_counterfactuals, self.optimized_counterfactuals
+            return None
 
-    def counterfactual_generator(
+
+    def _generator(
         self,
         instances_to_explain: np.array,
-        reference_data: np.array,
-        reference_weights: Optional[np.array] = None,
         alpha: float = 0.5,
         theta: float = 0.51,
         n_partitions: int = 12,
@@ -817,10 +856,9 @@ class CONFETTI:
         optimize_proximity: bool = False,
         proximity_distance: str = "euclidean",
         dtw_window: Optional[int] = None,
-        save_counterfactuals: bool = False,
-        output_path: Optional[str] = None,
         verbose: bool = False,
-    ) -> Tuple[None, pd.DataFrame] | Tuple[pd.DataFrame, pd.DataFrame]:
+    ) -> None | CounterfactualResults:
+
         """
         Generate counterfactual explanations sequentially for a set of input instances using CONFETTI.
 
@@ -833,12 +871,6 @@ class CONFETTI:
         ----------
         ``instances_to_explain`` : np.array
             A NumPy array of instances for which counterfactuals should be generated.
-        ``reference_data`` : np.array
-            A NumPy array of instances used as the reference set for finding nearest unlike neighbors (NUNs).
-        ``reference_weights`` : Optional[np.array] = None
-            A NumPy array containing the feature weights (e.g. Class Activation Map) for each instance in
-            the reference set. Each entry highlights the importance of individual time steps in
-            the model’s class prediction.
         ``theta`` : float, default=0.51
             Confidence threshold for selecting valid counterfactuals
             (i.e., predicted class probability must be ≥ theta).
@@ -865,150 +897,146 @@ class CONFETTI:
             Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
         ``dtw_window`` : Optional[int], default=None
             Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
-        ``save_counterfactuals`` : bool, default=False
-            Whether to save the generated counterfactuals to disk.
-        ``output_path`` : Optional[str], optional
-            Directory path to save counterfactuals. Required if `save_counterfactuals=True`.
         ``verbose`` : bool, default=False
             If True, print progress and debug information during execution.
 
         Returns:
         -------
-        None
-            Results are optionally saved to disk and/or stored internally for further use.
+        ``counterfactual_results`` : CounterfactualResults
+            A CounterfactualResults object containing all generated counterfactual sets
+            for the input instances.
+            Can return None if no counterfactuals were found.
         """
+        counterfactual_sets: List[CounterfactualSet] = []
 
-        self._validate_types(locals(), context="counterfactual_generator")
+        for instance_index in range(len(instances_to_explain)):
 
-        self.instances_to_explain = instances_to_explain
-        self.original_labels = np.argmax(
-            self.model.predict(self.instances_to_explain, verbose=0), axis=1
-        )
-        self.reference_data = reference_data
-        self.reference_labels = np.argmax(
-            self.model.predict(self.reference_data, verbose=0), axis=1
-        )
-        self.weights = reference_weights
-
-        valid_instances = []
-        for instance in range(len(instances_to_explain)):
-            result = self._nearest_unlike_neighbour(
-                query=self.instances_to_explain[instance],
-                predicted_label=self.original_labels[instance],
+            nun_index = self._nearest_unlike_neighbour(
+                query=self.instances_to_explain[instance_index],
+                predicted_label=self.original_labels[instance_index],
                 distance=proximity_distance,
                 n_neighbors=1,
                 theta=theta,
             )
-            if result is not None and result[1] is not None and len(result[1]) > 0:
-                self.nuns.append(int(result[1][0]))
-                valid_instances.append(instance)
-            else:
-                print(f"Skipping instance {instance}: No valid NUN found.")
+            if nun_index is None:
+                if verbose:
+                    print(f"Skipping instance {instance_index}: No valid NUN found.")
+                continue
 
-        self.nuns = np.array(self.nuns)
-        test_instances = np.array(valid_instances)
 
-        self.naive_counterfactuals = pd.DataFrame(
-            columns=["Solution", "Window", "Test Instance", "NUN Instance"]
-        )
-        self.optimized_counterfactuals = pd.DataFrame(
-            columns=["Solution", "Window", "Test Instance", "NUN Instance"]
-        )
-
-        if self.weights is not None:
-            for test_instance, nun in zip(test_instances, self.nuns):
-                naive_df = self._naive_stage(
-                    instance_index=test_instance,
-                    nun_index=nun,
+            if self.weights is not None:
+                naive, subarray_length = self._naive_stage(
+                    instance_index=instance_index,
+                    nun_index=nun_index,
                     model=self.model,
                     theta=theta,
                 )
-                if naive_df is not None:
-                    self.naive_counterfactuals = pd.concat(
-                        [self.naive_counterfactuals, naive_df], ignore_index=True
-                    )
 
-        for test_instance in test_instances:
-            if not self.naive_counterfactuals.empty:
-                instance_naive_counterfactual = self.naive_counterfactuals[
-                    self.naive_counterfactuals["Test Instance"] == test_instance
-                ]
-
-                if instance_naive_counterfactual.empty:
-                    print(
-                        f"Skipping optimization for instance {test_instance}: No naive counterfactual found."
-                    )
+                if naive is None:
+                    if verbose:
+                        print(f"Skipping instance {instance_index}: No valid naive counterfactual found.")
                     continue
+
+                optimized: CounterfactualSet = self._optimization(
+                    instance_index=instance_index,
+                    nun_index=nun_index,
+                    subsequence_length=subarray_length,
+                    model=self.model,
+                    alpha=alpha,
+                    theta=theta,
+                    n_partitions=n_partitions,
+                    population_size=population_size,
+                    maximum_number_of_generations=maximum_number_of_generations,
+                    crossover_probability=crossover_probability,
+                    mutation_probability=mutation_probability,
+                    optimize_confidence=optimize_confidence,
+                    optimize_sparsity=optimize_sparsity,
+                    optimize_proximity=optimize_proximity,
+                    proximity_distance=proximity_distance,
+                    dtw_window=dtw_window,
+                    verbose=verbose,
+                )
+                if optimized is not None:
+                    counterfactual_sets.append(optimized)
                 else:
-                    subsequence_length = instance_naive_counterfactual["Window"].iloc[0]
-                    nun = self.nuns[test_instances.tolist().index(test_instance)]
+                    counterfactual_set = CounterfactualSet(
+                        original_instance=self.instances_to_explain[instance_index],
+                        original_label=self.original_labels[instance_index],
+                        nearest_unlike_neighbour=self.reference_data[nun_index],
+                        best_solution=naive,
+                        all_counterfactuals=[naive],
+                    )
+                    counterfactual_sets.append(counterfactual_set)
             else:
-                subsequence_length = self.instances_to_explain.shape[1]
-                nun = self.nuns[test_instances.tolist().index(test_instance)]
+                if verbose:
+                    print(f"Skipping Naive Stage as no weights were provided.")
 
-            instance_optimized_counterfactuals = self._optimization(
-                instance_index=test_instance,
-                nun_index=nun,
-                subsequence_length=subsequence_length,
-                model=self.model,
-                alpha=alpha,
-                theta=theta,
-                n_partitions=n_partitions,
-                population_size=population_size,
-                maximum_number_of_generations=maximum_number_of_generations,
-                crossover_probability=crossover_probability,
-                mutation_probability=mutation_probability,
-                optimize_confidence=optimize_confidence,
-                optimize_sparsity=optimize_sparsity,
-                optimize_proximity=optimize_proximity,
-                proximity_distance=proximity_distance,
-                dtw_window=dtw_window,
-                verbose=verbose,
-            )
-            if instance_optimized_counterfactuals is not None:
-                self.optimized_counterfactuals = pd.concat(
-                    [self.optimized_counterfactuals, instance_optimized_counterfactuals], ignore_index=True
+                optimized: CounterfactualSet = self._optimization(
+                    instance_index=instance_index,
+                    nun_index=nun_index,
+                    subsequence_length=self.instances_to_explain.shape[1],
+                    model=self.model,
+                    alpha=alpha,
+                    theta=theta,
+                    n_partitions=n_partitions,
+                    population_size=population_size,
+                    maximum_number_of_generations=maximum_number_of_generations,
+                    crossover_probability=crossover_probability,
+                    mutation_probability=mutation_probability,
+                    optimize_confidence=optimize_confidence,
+                    optimize_sparsity=optimize_sparsity,
+                    optimize_proximity=optimize_proximity,
+                    proximity_distance=proximity_distance,
+                    dtw_window=dtw_window,
+                    verbose=verbose,
                 )
+                if optimized is not None:
+                    counterfactual_sets.append(optimized)
+                else:
+                    if verbose:
+                        print(f"No valid optimized counterfactual found for instance {instance_index}.")
+                    continue
 
-            '''
-            self.optimized_counterfactuals = (
-                self.optimized_counterfactuals.groupby("Test Instance", as_index=False)
-                .apply(lambda x: x.drop_duplicates(subset="Window"))
-                .reset_index(drop=True)
-            )'''
-
-        if save_counterfactuals:
-
-            output_directory = Path(output_path) if output_path else Path.cwd()
-            output_directory.mkdir(parents=True, exist_ok=True)
-
-            # Convert Solution arrays to space-separated strings for CSV compatibility
-            self.naive_counterfactuals["Solution"] = self.naive_counterfactuals[
-                "Solution"
-            ].apply(array_to_string)
-
-            # Save the naive counterfactuals
-            if not self.naive_counterfactuals.empty:
-                self.naive_counterfactuals.to_csv(
-                    output_directory / "confetti_naive_counterfactuals.csv", index=False
-                )
-
-            self.optimized_counterfactuals["Solution"] = self.optimized_counterfactuals[
-                "Solution"
-            ].apply(array_to_string)
-            self.optimized_counterfactuals.to_csv(
-                output_directory / "confetti_optimized_counterfactuals.csv", index=False
-            )
-            print(f"Counterfactuals saved on {output_directory}")
-
-        if self.naive_counterfactuals.empty:
-            return None, self.optimized_counterfactuals
+        if counterfactual_sets:
+            return CounterfactualResults(
+                counterfactual_sets=self.counterfactual_sets)
         else:
-            return self.naive_counterfactuals, self.optimized_counterfactuals
-
+            return None
 
     @staticmethod
-    def _validate_types(arguments: dict, context: str = ""):
+    def _findsubarray(w: list, k: int) -> int:
+        """
+        Identify the starting index of the contiguous subsequence of length ``k`` in the list ``w``
+        that has the maximum total sum.
+
+        This method performs a linear scan using a sliding window approach to efficiently find
+        the most "important" region of the input signal, where ``w`` represents feature attribution weights
+         (e.g. Class Activation Map weights)
+
+        Parameters:
+        ----------
+        ``w`` : list
+            A list of importance weights (e.g., CAM values) for each time step of the NUN.
+        ``k`` : int
+            Desired length of the subsequence.
+
+        Returns:
+        -------
+        int
+            Starting index of the contiguous subsequence of length `k` with the highest total weight.
+        """
+        start = 0
+        max_sum = curr_sum = sum(w[start: start + k])
+        for i in range(1, len(w) - k + 1):
+            curr_sum -= w[i - 1]
+            curr_sum += w[i + k - 1]
+            if curr_sum > max_sum:
+                max_sum = curr_sum
+                start = i
+        return start
+
+    @staticmethod
+    def _validate_types(arguments: dict, context: Optional[str] = None) -> None:
         """
         Validates argument types for CONFETTI generators. Handles both parallel and non-parallel modes.
         """
@@ -1034,7 +1062,7 @@ class CONFETTI:
         }
 
         # Add only if using the parallel version
-        if context == "parallelized_counterfactual_ generator":
+        if context == "parallelization":
             expected_types["processes"] = int
 
         for name, expected in expected_types.items():
@@ -1049,8 +1077,8 @@ class CONFETTI:
         output_path = arguments.get("output_path")
         save = arguments.get("save_counterfactuals")
         if save:
-            if output_path is None or not isinstance(output_path, str):
+            if output_path is not None and not isinstance(output_path, (str, Path)):
                 raise CONFETTIConfigurationError(
                     f"{context + ': ' if context else ''}"
-                    "`output_path` must be a non-None string when `save_counterfactuals=True`."
+                    "`output_path` must be a None or a valid string."
                 )
