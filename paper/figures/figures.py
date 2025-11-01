@@ -1,5 +1,5 @@
 import pandas as pd
-import config as cfg
+from paper import config as cfg
 from pathlib import Path
 from src.confetti.utils import (
     load_data,

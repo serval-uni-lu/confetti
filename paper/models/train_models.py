@@ -2,7 +2,7 @@ from paper.models.resnet import ClassifierRESNET
 from paper.models.fcn import ClassifierFCN
 from src.confetti.utils import load_data
 import numpy as np
-import config as cfg
+from paper import config as cfg
 import keras
 
 

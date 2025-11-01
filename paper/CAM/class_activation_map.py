@@ -5,7 +5,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from pathlib import Path
-import config as cfg
+from paper import config as cfg
 
 
 def compute_weights_cam(

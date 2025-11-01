@@ -1,4 +1,4 @@
-import config as cfg
+from paper import config as cfg
 from pathlib import Path
 import keras
 import warnings

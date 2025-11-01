@@ -10,7 +10,7 @@ from src.confetti.utils import (
     load_multivariate_ts_from_csv,
     array_to_string,
 )
-import config as cfg
+from paper import config as cfg
 
 tf.keras.utils.disable_interactive_logging()
 

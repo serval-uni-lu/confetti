@@ -9,7 +9,7 @@ from src.confetti.utils import (
     load_multivariate_ts_from_csv,
 )
 import keras
-import config as cfg
+from paper import config as cfg
 import tensorflow as tf
 from pathlib import Path
 

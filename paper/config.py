@@ -4,17 +4,16 @@ from pathlib import Path
 current_file_path = Path(__file__).resolve()
 
 BASE_DIR = current_file_path.parent
-PAPER_DIR = BASE_DIR / "paper"
-MODELS_DIR = PAPER_DIR / "models"
+MODELS_DIR = BASE_DIR / "models"
 TRAINED_MODELS_DIR = MODELS_DIR / "trained_models"
 CAM_WEIGHTS_DIR = TRAINED_MODELS_DIR
-RESULTS_DIR = PAPER_DIR / "results"
-DATA_DIR = PAPER_DIR / "benchmark" / "data"
-EVALUATIONS_FILE = PAPER_DIR / "benchmark" / "evaluations" / "all_evaluation_results.csv"
+RESULTS_DIR = BASE_DIR / "results"
+DATA_DIR = BASE_DIR / "benchmark" / "data"
+EVALUATIONS_FILE = BASE_DIR / "benchmark" / "evaluations" / "all_evaluation_results.csv"
 EXPERIMENT_PROXIMITY_METRIC = (
-    PAPER_DIR / "benchmark" / "experiments" / "proximity_metric_results"
+    BASE_DIR / "benchmark" / "experiments" / "proximity_metric_results"
 )
-EXPERIMENT_OBJECTIVES = PAPER_DIR / "benchmark" / "experiments" / "objectives_results"
+EXPERIMENT_OBJECTIVES = BASE_DIR / "benchmark" / "experiments" / "objectives_results"
 
 NUMBER_OF_SAMPLES_PER_CLASS = {
     "ArticularyWordRecognition": 1,

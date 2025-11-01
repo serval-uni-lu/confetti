@@ -1,5 +1,5 @@
 import os
-import config as cfg
+from paper import config as cfg
 from src.confetti.utils import (
     load_data,
     get_samples,

@@ -3,7 +3,8 @@ import pandas as pd
 from scipy.stats import wilcoxon
 from typing import Optional
 from sklearn.preprocessing import MinMaxScaler
-import config as cfg
+from paper import config as cfg
+
 
 # TODO: Delete this file
 

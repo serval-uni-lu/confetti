@@ -70,10 +70,10 @@ class CounterfactualSet():
     """
 
     def __init__(self,
-                 original_instance: np.array,
+                 original_instance: np.ndarray,
                  original_label: str | int | float | np.int64 | np.float64,
-                 nearest_unlike_neighbour: np.array,
-                 best_solution: Counterfactual,
+                 nearest_unlike_neighbour: np.ndarray,
+                 best_solution: None |Counterfactual,
                  all_counterfactuals: List[Counterfactual]):
 
         self._validate_dtypes(original_instance,
@@ -162,7 +162,7 @@ class CounterfactualSet():
             original_instance: np.ndarray,
             original_label: Union[str, int, float, np.int64, np.float64],
             nearest_unlike_neighbour: np.ndarray,
-            best_solution: Counterfactual,
+            best_solution: None | Counterfactual,
             all_counterfactuals: List[Counterfactual]
     ) -> None:
         """
@@ -179,7 +179,6 @@ class CounterfactualSet():
             ("original_label", original_label, (str, int, float, np.int64, np.float64),
              "string, integer, float, np.int64, or np.float64"),
             ("nearest_unlike_neighbour", nearest_unlike_neighbour, np.ndarray, "numpy array"),
-            ("best_solution", best_solution, Counterfactual, "Counterfactual object"),
         ]
 
         for param, value, expected_type, expected_str in validations:
@@ -189,6 +188,13 @@ class CounterfactualSet():
                     param=param,
                     hint=f"Ensure that {param} is of type {expected_str}."
                 )
+
+        if best_solution is not None and not isinstance(best_solution, Counterfactual):
+            raise CONFETTIDataTypeError(
+                message="best_solution must be a Counterfactual object or None.",
+                param="best_solution",
+                hint="Ensure that best_solution is either None or of type Counterfactual."
+            )
 
         if not all(isinstance(cf, Counterfactual) for cf in all_counterfactuals):
             raise CONFETTIDataTypeError(

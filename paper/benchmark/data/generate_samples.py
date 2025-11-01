@@ -5,7 +5,7 @@ from src.confetti.utils import (
     save_multivariate_ts_as_csv,
     get_predicted_samples,
 )
-import config as cfg
+from paper import config as cfg
 import numpy as np
 
 

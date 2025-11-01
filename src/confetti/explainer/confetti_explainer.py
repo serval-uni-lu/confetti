@@ -1,4 +1,4 @@
-from confetti.errors import CONFETTIConfigurationError
+from confetti.errors import CONFETTIConfigurationError, CONFETTIError, CONFETTIDataTypeError
 from confetti.explainer._problem import CounterfactualProblem
 from confetti.explainer.counterfactuals import Counterfactual, CounterfactualSet, CounterfactualResults
 
@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 
 import keras
-import tensorflow as tf
 from tslearn.neighbors import KNeighborsTimeSeries
 
 from pymoo.algorithms.moo.nsga3 import NSGA3
@@ -24,33 +23,122 @@ from pymoo.termination import get_termination
 
 from multiprocessing import Pool
 from functools import partial
-tf.keras.utils.disable_interactive_logging()
 
 class CONFETTI:
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: Union[None,str] = None):
         """
         Initialize the CONFETTI explainer with the model and data.
         Args:
             model_path: Path to the trained model
         """
-        if model_path is None or not isinstance(model_path, str):
+        if not isinstance(model_path, str):
             raise CONFETTIConfigurationError(
                 f"model_path must be a valid string path to the trained model, "
                 f"but got {type(model_path).__name__} instead."
             )
+        self._model_path = model_path
+        self._model = keras.models.load_model(model_path)
 
-        self.model_path = model_path
-        self.model = keras.models.load_model(model_path)
-        self.instances_to_explain: Optional[np.array] = None
-        self.original_labels: Optional[np.array] = None
-        self.reference_data: Optional[np.array] = None
-        self.reference_labels: Optional[np.array] = None
-        self.weights: Optional[np.array] = None
+        self._instances_to_explain: Optional[np.ndarray] = None
+        self._original_labels: Optional[np.ndarray] = None
+        self._reference_data: Optional[np.ndarray] = None
+        self._reference_labels: Optional[np.ndarray] = None
+        self._weights: Optional[np.ndarray] = None
         self.nuns: List[int] = []
+
+    @property
+    def model_path(self) -> str:
+        return self._model_path
+
+    @property
+    def model(self):
+        return self._model
+
+    @property
+    def instances_to_explain(self) -> np.ndarray:
+        return self._instances_to_explain
+
+    @instances_to_explain.setter
+    def instances_to_explain(self, instances: np.ndarray) -> None:
+        if not isinstance(instances, np.ndarray):
+            raise CONFETTIDataTypeError(
+                message=f"instances_to_explain must be a numpy ndarray, but got {type(instances).__name__} instead.",
+                param="instances_to_explain",
+                source="instances_to_explain setter"
+            )
+        self._instances_to_explain = instances
+
+    @property
+    def original_labels(self) -> np.ndarray:
+        return self._original_labels
+
+    @original_labels.setter
+    def original_labels(self, labels: np.ndarray) -> None:
+        if not isinstance(labels, np.ndarray):
+            raise CONFETTIDataTypeError(
+                message=f"original_labels must be a numpy ndarray, but got {type(labels).__name__} instead.",
+                param="original_labels",
+                source="original_labels setter"
+            )
+        self._original_labels = labels
+
+    @property
+    def reference_data(self) -> np.ndarray:
+        if self._reference_data is None:
+            raise CONFETTIConfigurationError(
+                message = "Reference data has not been set. Please set reference data before accessing it.",
+                param = "reference_data",
+                source = "reference_data property"
+            )
+        return self._reference_data
+
+    @reference_data.setter
+    def reference_data(self, data: np.ndarray) -> None:
+        if not isinstance(data, np.ndarray):
+            raise CONFETTIDataTypeError(
+                message=f"reference_data must be a numpy ndarray, but got {type(data).__name__} instead.",
+                param="reference_data",
+                source="reference_data setter"
+            )
+        self._reference_data = data
+
+    @property
+    def reference_labels(self) -> np.ndarray:
+        if self._reference_labels is None:
+            raise CONFETTIConfigurationError(
+                message = "Reference labels have not been set. Please set reference labels before accessing them.",
+                param = "reference_labels",
+                source = "reference_labels property"
+            )
+        return self._reference_labels
+
+    @reference_labels.setter
+    def reference_labels(self, labels: np.ndarray) -> None:
+        if not isinstance(labels, np.ndarray):
+            raise CONFETTIDataTypeError(
+                message=f"reference_labels must be a numpy ndarray, but got {type(labels).__name__} instead.",
+                param="reference_labels",
+                source="reference_labels setter"
+            )
+        self._reference_labels = labels
+
+    @property
+    def weights(self) -> None | np.ndarray:
+        return self._weights
+
+    @weights.setter
+    def weights(self, weights: None | np.ndarray) -> None:
+        if not isinstance(weights, np.ndarray):
+            raise CONFETTIDataTypeError(
+                message=f"weights must be a numpy ndarray, but got {type(weights).__name__} instead.",
+                param="weights",
+                source="weights setter"
+            )
+        self._weights = weights
 
     def _nearest_unlike_neighbour(
         self,
-        query: np.array,
+        query: np.ndarray,
         predicted_label: int,
         distance: str = "euclidean",
         dtw_window: Optional[int] = None,
@@ -68,7 +156,7 @@ class CONFETTI:
 
         Parameters:
         ----------
-        ``query`` : np.array
+        ``query`` : np.ndarray
             The instance to be explained, shaped (timesteps, dimensions).
         ``predicted_label`` : int
             The predicted class label of the query instance (e.g., obtained via `np.argmax(model.predict(...))`).
@@ -93,6 +181,12 @@ class CONFETTI:
         # Only keep unlike-labels
         unlike_mask = df["label"] != predicted_label
         unlike_indices = df[unlike_mask].index
+        if self.reference_data is None:
+            raise CONFETTIError(
+                message="Reference data is not set. Please ensure that reference data is provided before calling this method.",
+                param = "reference_data",
+                source = "_nearest_unlike_neighbour()"
+            )
         X_unlike = self.reference_data[list(unlike_indices)]
 
         # Fit KNN on unlike instances
@@ -180,7 +274,15 @@ class CONFETTI:
         if verbose:
             print(f"Naive stage started for instance {instance_index}")
 
-        starting_point : int = self._findsubarray(w=self.weights[nun_index], k=subarray_length)
+        if self.weights is None:
+            raise CONFETTIError(
+                message="It is not possible to perform the naive stage without feature weights.",
+                param = "weights",
+                source = "_naive_stage()",
+                hint = "Please provide feature weights to enable the naive stage."
+            )
+        else:
+            starting_point : int = self._findsubarray(w=self.weights[nun_index], k=subarray_length)
 
         perturbed_instance : np.ndarray = np.concatenate(
             (
@@ -332,6 +434,7 @@ class CONFETTI:
         query: np.ndarray = self.instances_to_explain[instance_index]
         nun : np.ndarray = copy.deepcopy(self.reference_data[nun_index])
         all_counterfactuals: List[Counterfactual] = []
+        objective_values: List[np.ndarray] = []
 
 
         high = subsequence_length
@@ -367,7 +470,6 @@ class CONFETTI:
                 optimize_proximity=optimize_proximity,
                 proximity_distance=proximity_distance,
                 dtw_window=dtw_window,
-                alpha=alpha,
                 theta=theta,
             )
 
@@ -392,6 +494,7 @@ class CONFETTI:
             if result.X is None:
                 low = window + 1
             else:
+                objective_values.append(result.F)
                 for perturbation in result.X:
                     perturbation_reshaped : np.ndarray = perturbation.reshape(window, query.shape[1])
                     perturbed_instance : np.ndarray = np.copy(query)
@@ -422,17 +525,18 @@ class CONFETTI:
         if verbose:
             print(f"Optimization of CE for Instance {instance_index} finished.")
 
-        # TODO: Verify that best solution is correct
-        #Temporary best solution
-        best_solution = Counterfactual(
-            counterfactual = np.ndarray(1),
-            label = 1
-        )
+        objectives_array: np.ndarray = np.vstack(objective_values)
+        if optimize_confidence and optimize_sparsity:
+            # Best Counterfactual only applies when optimizing confidence and sparsity (alpha)
+            best = self._select_best_solution(all_counterfactuals, objectives_array, alpha)
+        else:
+            best = None
+
         counterfactuals = CounterfactualSet(
             original_instance=query,
-            original_label = self.original_labels[instance_index],
+            original_label = self.original_labels[instance_index].item(),
             nearest_unlike_neighbour=nun,
-            best_solution = best_solution,
+            best_solution = best,
             all_counterfactuals=all_counterfactuals,
         )
 
@@ -510,7 +614,7 @@ class CONFETTI:
         # Find the Nearest Unlike Neighbour
         nun_index = self._nearest_unlike_neighbour(
             query=self.instances_to_explain[test_instance],
-            predicted_label=self.original_labels[test_instance],
+            predicted_label=self.original_labels[test_instance].item(),
             distance=proximity_distance,
             n_neighbors=1,
             theta=theta,
@@ -587,7 +691,7 @@ class CONFETTI:
             else:
                 counterfactual_set = CounterfactualSet(
                     original_instance=self.instances_to_explain[test_instance],
-                    original_label=self.original_labels[test_instance],
+                    original_label=self.original_labels[test_instance].item(),
                     nearest_unlike_neighbour=self.reference_data[nun_index],
                     best_solution=naive,
                     all_counterfactuals=[naive],
@@ -679,8 +783,8 @@ class CONFETTI:
         else:
             self._validate_types(locals())
 
-        self.instances_to_explain : np.ndarray = instances_to_explain
-        self.original_labels : np.ndarray = np.argmax(self.model.predict(self.instances_to_explain, verbose=0), axis=1)
+        self._instances_to_explain : np.ndarray = instances_to_explain
+        self._original_labels : np.ndarray = np.argmax(self.model.predict(self.instances_to_explain, verbose=0), axis=1)
         self.reference_data : np.ndarray = reference_data
         self.reference_labels : np.ndarray = np.argmax(self.model.predict(self.reference_data, verbose=0), axis=1)
         self.weights = reference_weights
@@ -843,7 +947,7 @@ class CONFETTI:
 
     def _generator(
         self,
-        instances_to_explain: np.array,
+        instances_to_explain: np.ndarray,
         alpha: float = 0.5,
         theta: float = 0.51,
         n_partitions: int = 12,
@@ -869,7 +973,7 @@ class CONFETTI:
 
         Parameters:
         ----------
-        ``instances_to_explain`` : np.array
+        ``instances_to_explain`` : np.ndarray
             A NumPy array of instances for which counterfactuals should be generated.
         ``theta`` : float, default=0.51
             Confidence threshold for selecting valid counterfactuals
@@ -913,7 +1017,7 @@ class CONFETTI:
 
             nun_index = self._nearest_unlike_neighbour(
                 query=self.instances_to_explain[instance_index],
-                predicted_label=self.original_labels[instance_index],
+                predicted_label=self.original_labels[instance_index].item(),
                 distance=proximity_distance,
                 n_neighbors=1,
                 theta=theta,
@@ -961,7 +1065,7 @@ class CONFETTI:
                 else:
                     counterfactual_set = CounterfactualSet(
                         original_instance=self.instances_to_explain[instance_index],
-                        original_label=self.original_labels[instance_index],
+                        original_label=self.original_labels[instance_index].item(),
                         nearest_unlike_neighbour=self.reference_data[nun_index],
                         best_solution=naive,
                         all_counterfactuals=[naive],
@@ -969,7 +1073,7 @@ class CONFETTI:
                     counterfactual_sets.append(counterfactual_set)
             else:
                 if verbose:
-                    print(f"Skipping Naive Stage as no weights were provided.")
+                    print("Skipping Naive Stage as no weights were provided.")
 
                 optimized: CounterfactualSet = self._optimization(
                     instance_index=instance_index,
@@ -1004,7 +1108,7 @@ class CONFETTI:
             return None
 
     @staticmethod
-    def _findsubarray(w: list, k: int) -> int:
+    def _findsubarray(w: np.ndarray, k: int) -> int:
         """
         Identify the starting index of the contiguous subsequence of length ``k`` in the list ``w``
         that has the maximum total sum.
@@ -1034,6 +1138,51 @@ class CONFETTI:
                 max_sum = curr_sum
                 start = i
         return start
+
+    @staticmethod
+    def _select_best_solution(
+            counterfactuals: List[Counterfactual],
+            objective_values: np.ndarray,
+            alpha: int | float
+    ) -> Counterfactual:
+        """Select the most relevant counterfactual from a counterfactual set given user weights.
+
+        The function applies a weighted sum using the provided weights (which are normalized to sum to 1 if positive).
+
+        Parameters
+        ----------
+        counterfactuals : CounterfactualSet
+            A counterfactual set including all counterfactuals obtained from the optimization stage.
+        objective_values : np.ndarray, shape = (n_solutions, n_objectives)
+            Objective values for each counterfactual solution. Each row corresponds to a solution,
+        alpha : int | float
+            Weighting parameter between confidence and sparsity in the objective function.
+            The higher the value, the more weight is given to confidence.
+
+        Returns
+        -------
+        best : Counterfactual
+            The counterfactual solution with the highest weighted score.
+
+        Notes
+        -----
+        Confidence is maximized while sparsity is minimized. However, in Pymoo's implementation, to maximize
+        an objective you need to set it to negative. (e.g. f1 = -confidence, f2 = sparsity). Thus, confidence in
+        objective values will appear as negative while sparsity as positive.
+        Therefore, it is necessary to first flip confidence so both objectives are higher-is-better before applying weights.
+
+        """
+
+        objective_values_flipped = objective_values[:, :2]
+        objective_values_flipped[:, 0] = -objective_values_flipped[:, 0]
+
+        weights = np.ndarray([alpha, 1 - alpha])
+
+        scores = np.dot(objective_values_flipped, weights)
+        best_index = np.argmax(scores)
+        best = counterfactuals[best_index]
+
+        return best
 
     @staticmethod
     def _validate_types(arguments: dict, context: Optional[str] = None) -> None:
@@ -1068,9 +1217,14 @@ class CONFETTI:
         for name, expected in expected_types.items():
             value = arguments.get(name)
             if not isinstance(value, expected):
+                expected_name = (
+                    ", ".join(t.__name__ for t in expected)
+                    if isinstance(expected, tuple)
+                    else expected.__name__
+                )
                 raise CONFETTIConfigurationError(
                     f"{context + ': ' if context else ''}"
-                    f"Parameter `{name}` must be of type {expected.__name__}, "
+                    f"Parameter `{name}` must be of type {expected_name}, "
                     f"but got {type(value).__name__}."
                 )
 

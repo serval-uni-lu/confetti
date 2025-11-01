@@ -14,7 +14,7 @@ from src.confetti.utils import (
 import paper.CAM.class_activation_map as cam
 from paper.benchmark.evaluations.evaluator import Evaluator
 
-import config as cfg
+from paper import config as cfg
 
 import tensorflow as tf
 import pandas as pd

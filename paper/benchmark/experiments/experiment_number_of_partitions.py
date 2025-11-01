@@ -6,7 +6,7 @@ from src.confetti.utils import (
 from paper.CAM import compute_weights_cam
 import pandas as pd
 import numpy as np
-import config as cfg
+from paper import config as cfg
 import keras
 import time
 from pathlib import Path

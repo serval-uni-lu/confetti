@@ -1,4 +1,4 @@
-import config as cfg
+from paper import config as cfg
 import keras
 import warnings
 import paper.CAM.class_activation_map as cam

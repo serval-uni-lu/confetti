@@ -3,7 +3,7 @@ Script to obtain the average execution time of CONFETTI for each dataset to eval
 affect the execution time of the counterfactual generation process.
 """
 
-import config as cfg
+from paper import config as cfg
 import keras
 import warnings
 import paper.CAM.class_activation_map as cam
