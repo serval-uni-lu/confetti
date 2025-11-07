@@ -1,8 +1,12 @@
-from src.confetti import CONFETTI
-from src.confetti.utils import (
+from numpy import floating
+
+from confetti import CONFETTI
+from confetti.explainer.counterfactuals import CounterfactualResults, CounterfactualSet, Counterfactual
+from confetti.utils import (
     load_multivariate_ts_from_csv,
     load_data,
 )
+from typing import List
 from paper.CAM import compute_weights_cam
 import pandas as pd
 import numpy as np
@@ -11,18 +15,31 @@ import keras
 import time
 from pathlib import Path
 
-
-def get_sparsity(original: pd.DataFrame, counterfactual: pd.DataFrame):
-    return np.mean(original.flatten() == counterfactual.flatten())
+keras.utils.disable_interactive_logging()
 
 
-def get_confidence(model, counterfactual, timesteps, channels, original_label):
-    return (
+def get_sparsity(original: np.ndarray, counterfactuals: List[Counterfactual]):
+    """Compute the mean sparsity across multiple counterfactuals."""
+    sparsities: list[floating] = [
+        np.mean(original.flatten() == cf.counterfactual.flatten()) for cf in counterfactuals
+    ]
+    return float(np.mean(sparsities))
+
+
+
+def get_confidence(model,
+                   counterfactual : List[Counterfactual],
+                   timesteps : int,
+                   channels : int,
+                   original_label):
+    confidences : list[floating] = [
         1
-        - model.predict(counterfactual.reshape(1, timesteps, channels))[0][
+        - model.predict(cf.counterfactual.reshape(1, timesteps, channels))[0][
             original_label
         ]
-    )
+        for cf in counterfactual
+    ]
+    return float(np.mean(confidences))
 
 
 partitions = [2, 4, 8, 16, 32, 64]
@@ -38,7 +55,7 @@ def run_experiment(model_name: str = "fcn"):
     sample_path = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
     X_samples, y_samples = load_multivariate_ts_from_csv(sample_path)
     X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
-    training_weights = compute_weights_cam(
+    training_weights : np.ndarray = compute_weights_cam(
         model=model,
         X_data=X_train,
         dataset=dataset,
@@ -50,7 +67,7 @@ def run_experiment(model_name: str = "fcn"):
     results = {"Partitions": [], "Execution Time": [], "Sparsity": [], "Confidence": []}
     for partition in partitions:
         start_time = time.time()
-        ces_naive, ces_optimized = exp.parallelized_counterfactual_generator(
+        counterfactuals : CounterfactualResults = exp.generate_counterfactuals(
             instances_to_explain=X_samples,
             reference_data=X_train,
             reference_weights=training_weights,
@@ -63,16 +80,16 @@ def run_experiment(model_name: str = "fcn"):
         # Calculate sparsity and confidence
         sparsities = []
         confidences = []
-        for i in range(len(ces_optimized)):
-            counterfactual = ces_optimized["Solution"].iloc[i]
-            original_instance = X_samples[ces_optimized["Test Instance"].iloc[i]]
-            og_label = y_samples[ces_optimized["Test Instance"].iloc[i]]
+        for i in range(len(counterfactuals)):
+            counterfactual_set : CounterfactualSet = counterfactuals[i]
+            original_instance : np.ndarray = counterfactual_set.original_instance
+            og_label = counterfactual_set.original_label
             sparsity = get_sparsity(
-                original=original_instance, counterfactual=counterfactual
+                original=original_instance, counterfactuals=counterfactual_set.all_counterfactuals
             )
             confidence = get_confidence(
                 model=model,
-                counterfactual=counterfactual,
+                counterfactual=counterfactual_set.all_counterfactuals,
                 timesteps=X_samples.shape[1],
                 channels=X_samples.shape[2],
                 original_label=og_label,

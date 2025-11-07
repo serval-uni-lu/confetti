@@ -3,8 +3,9 @@ from pathlib import Path
 import keras
 import warnings
 import paper.CAM.class_activation_map as cam
-from src.confetti.explainer.confetti_explainer import CONFETTI
-from src.confetti.utils import (
+from confetti.explainer.confetti_explainer import CONFETTI
+from confetti.explainer.counterfactuals import CounterfactualResults
+from confetti.utils import (
     load_data,
     load_multivariate_ts_from_csv,
     array_to_string,
@@ -14,9 +15,33 @@ import pandas as pd
 from paper.benchmark.evaluations.evaluator import Evaluator
 import time
 from tqdm import tqdm
+import numpy as np
+keras.utils.disable_interactive_logging()
 
 
 # TODO: Perform statistical tests and rankings at the end of the experiment
+
+def create_standard_results_dataframe(
+    counterfactuals: CounterfactualResults,
+    test_instances: np.ndarray,
+    nun_instances: np.ndarray
+) -> pd.DataFrame:
+    """Create the standard DataFrame used by the Evaluator from CounterfactualResults."""
+    df = counterfactuals.to_dataframe()
+    df["counterfactual"] = df["counterfactual"].apply(array_to_string)
+
+    df["Test Instance"] = [
+        next((i for i, instance in enumerate(test_instances) if np.array_equal(original, instance)), None)
+        for original in df["original_instance"]
+    ]
+
+    df["NUN Instance"] = [
+        next((i for i, instance in enumerate(nun_instances) if np.array_equal(nun, instance)), None)
+        for nun in df["nearest_unlike_neighbour"]
+    ]
+
+    df = df.rename(columns={"label": "CE Label", "counterfactual": "Solution"})
+    return df[["Solution", "Test Instance", "NUN Instance", "CE Label"]].reset_index(drop=True)
 
 
 def run_proximity_metric_experiment(model_name: str = "fcn"):
@@ -55,7 +80,7 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
             unit="metric",
         ):
             start_time = time.time()
-            ces_naive, ces_optimized = explainer.parallelized_counterfactual_generator(
+            counterfactuals : CounterfactualResults = explainer.generate_counterfactuals(
                 instances_to_explain=X_samples,
                 reference_data=X_train,
                 reference_weights=training_weights,
@@ -67,11 +92,15 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
             )
             total_time = time.time() - start_time
 
+            counterfactuals_df = create_standard_results_dataframe(counterfactuals, X_samples, X_train)
+
+            #TODO: Create the counterfactual dataframe that Evaluator needs
+
             _, dataset_summary = evaluator.evaluate_results(
                 model=model,
                 explainer=metric,
                 dataset=dataset,
-                counterfactuals=ces_optimized,
+                counterfactuals=counterfactuals_df,
                 sample=X_samples,
                 og_labels=y_samples,
                 training_data=X_train,
@@ -79,19 +108,13 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
                 channels=X_train.shape[2],
                 alpha=True,
                 param_config=0.5,
-                fallback_counterfactuals=ces_naive,
             )
 
             dataset_summary["Computation Time"] = total_time
             summary.append(dataset_summary)
 
-            ces_naive["Solution"] = ces_naive["Solution"].apply(array_to_string)
-            ces_naive.to_csv(results_dir / f"{dataset}_{metric}_naive.csv", index=False)
 
-            ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
-            ces_optimized.to_csv(
-                results_dir / f"{dataset}_{metric}_optimized.csv", index=False
-            )
+            counterfactuals_df.to_csv(results_dir / f"{dataset}_{metric}.csv")
 
             if metric == "dtw":
                 small_window = int(X_train.shape[1] * 0.20)
@@ -102,8 +125,8 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
                 ):
                     start_time = time.time()
 
-                    ces_naive, ces_optimized = (
-                        explainer.parallelized_counterfactual_generator(
+                    counterfactuals : CounterfactualResults = (
+                        explainer.generate_counterfactuals(
                             instances_to_explain=X_samples,
                             reference_data=X_train,
                             reference_weights=training_weights,
@@ -118,11 +141,13 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
 
                     total_time = time.time() - start_time
 
+                    counterfactuals_df = create_standard_results_dataframe(counterfactuals, X_samples, X_train)
+
                     _, dataset_summary = evaluator.evaluate_results(
                         model=model,
                         explainer=f"{metric}_{'small_window' if dtw_window == small_window else 'medium_window'}",
                         dataset=dataset,
-                        counterfactuals=ces_optimized,
+                        counterfactuals=counterfactuals_df,
                         sample=X_samples,
                         og_labels=y_samples,
                         training_data=X_train,
@@ -130,25 +155,13 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
                         channels=X_train.shape[2],
                         alpha=True,
                         param_config=0.50,
-                        fallback_counterfactuals=ces_naive,
                     )
                     dataset_summary["Computation Time"] = total_time
 
                     summary.append(dataset_summary)
 
-                    ces_naive["Solution"] = ces_naive["Solution"].apply(array_to_string)
-                    ces_naive.to_csv(
-                        results_dir / f"{dataset}_{metric}_{dtw_window}_naive.csv",
-                        index=False,
-                    )
-
-                    ces_optimized["Solution"] = ces_optimized["Solution"].apply(
-                        array_to_string
-                    )
-                    ces_optimized.to_csv(
-                        results_dir / f"{dataset}_{metric}_{dtw_window}_optimized.csv",
-                        index=False,
-                    )
+                    # TODO: Check this
+                    counterfactuals_df.to_csv(results_dir / f"{dataset}_{metric}_{dtw_window}.csv")
 
     df_summary = pd.concat(summary, ignore_index=True, sort=True)
     df_summary.to_csv(results_dir / "best_proximity_metric.csv", index=False)

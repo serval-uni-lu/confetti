@@ -25,6 +25,9 @@ dependencies = [
     "xlsxwriter==3.2.9",
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [dependency-groups]
 dev = [
     "ruff>=0.14.1",

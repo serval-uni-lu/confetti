@@ -126,11 +126,12 @@ class CounterfactualSet():
             )
         else:
             data = {
-                "counterfactual": [array_to_string(cf.counterfactual) for cf in self.all_counterfactuals],
+                "counterfactual": [cf.counterfactual for cf in self.all_counterfactuals],
                 "is_best": [cf == self.best for cf in self.all_counterfactuals],
                 "label": [cf.label for cf in self.all_counterfactuals],
-                "original_instance": array_to_string(self.original_instance),
-                "nearest_unlike_neighbour": array_to_string(self.nearest_unlike_neighbour)
+                "original_instance": [self.original_instance] * len(self.all_counterfactuals),
+                "original_label": [self.original_label] * len(self.all_counterfactuals),
+                "nearest_unlike_neighbour": [self.nearest_unlike_neighbour] * len(self.all_counterfactuals),
             }
 
             df = pd.DataFrame(data)
@@ -154,6 +155,9 @@ class CounterfactualSet():
             )
 
         df = self.to_dataframe()
+        df["counterfactual"] = df["counterfactual"].apply(array_to_string)
+        df["original_instance"] = df["original_instance"].apply(array_to_string)
+        df["nearest_unlike_neighbour"] = df["nearest_unlike_neighbour"].apply(array_to_string)
         df.to_csv(output_path, index=False)
         print(f"Counterfactuals exported to {output_path}")
 
@@ -225,8 +229,6 @@ class CounterfactualResults():
         Export all counterfactuals for all instances to a CSV file.
     """
 
-
-
     def __init__(self, counterfactual_sets: Optional[List[CounterfactualSet]] = None):
 
         self._counterfactual_sets: None | List[CounterfactualSet] = counterfactual_sets
@@ -234,6 +236,20 @@ class CounterfactualResults():
     @property
     def counterfactual_sets(self) -> List[CounterfactualSet]:
         return self._counterfactual_sets
+
+    def __len__(self) -> int:
+        """Return the number of CounterfactualSet objects stored."""
+        return len(self._counterfactual_sets or [])
+
+    def __getitem__(self, index: int) -> CounterfactualSet:
+        """Return the CounterfactualSet at the specified index."""
+        if self._counterfactual_sets is None:
+            raise CONFETTIError(
+                message="No counterfactual sets available for indexing.",
+                param="counterfactual_sets",
+                hint="Generate counterfactual sets before attempting to access them."
+            )
+        return self._counterfactual_sets[index]
 
     def to_dataframe(self) -> pd.DataFrame:
         """
@@ -254,7 +270,6 @@ class CounterfactualResults():
         else:
             return pd.concat([ces.to_dataframe() for ces in self.counterfactual_sets], ignore_index=True)
 
-
     def to_csv(self, output_path: Path | str = Path("./counterfactuals.csv") ) -> None:
         """
         Export all counterfactuals for all instances to a CSV file.
@@ -273,5 +288,8 @@ class CounterfactualResults():
 
 
         df = self.to_dataframe()
+        df["counterfactual"] = df["counterfactual"].apply(array_to_string)
+        df["original_instance"] = df["original_instance"].apply(array_to_string)
+        df["nearest_unlike_neighbour"] = df["nearest_unlike_neighbour"].apply(array_to_string)
         df.to_csv(output_path, index=False)
         print(f"All counterfactuals exported to {output_path}")

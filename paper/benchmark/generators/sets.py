@@ -1,7 +1,6 @@
 import numpy as np
 import keras
 import pandas as pd
-import tensorflow as tf
 import time
 from tqdm import tqdm
 from TSInterpret.InterpretabilityModels.counterfactual.SETSCF import SETSCF
@@ -12,7 +11,7 @@ from src.confetti.utils import (
 )
 from paper import config as cfg
 
-tf.keras.utils.disable_interactive_logging()
+keras.utils.disable_interactive_logging()
 
 
 def run_sets_counterfactuals(model_name=None):

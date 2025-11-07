@@ -2,7 +2,6 @@ import numpy as np
 import keras
 import pandas as pd
 import time
-import tensorflow as tf
 from tqdm import tqdm
 from TSInterpret.InterpretabilityModels.counterfactual.COMTECF import COMTECF
 from src.confetti.utils import (
@@ -12,7 +11,7 @@ from src.confetti.utils import (
 )
 from paper import config as cfg
 
-tf.keras.utils.disable_interactive_logging()
+keras.utils.disable_interactive_logging()
 
 
 def run_comte_counterfactuals(model_name=None):

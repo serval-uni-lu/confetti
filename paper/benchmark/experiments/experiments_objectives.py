@@ -5,8 +5,9 @@ import time
 from tqdm import tqdm
 from pathlib import Path
 
-from src.confetti import CONFETTI
-from src.confetti.utils import (
+from confetti import CONFETTI
+from confetti.explainer.counterfactuals import CounterfactualResults
+from confetti.utils import (
     load_data,
     load_multivariate_ts_from_csv,
     array_to_string,
@@ -18,9 +19,32 @@ from paper import config as cfg
 
 import tensorflow as tf
 import pandas as pd
+import numpy as np
 import keras
 
 # TODO: Perform statistical tests and rankings at the end of the experiment
+
+def create_standard_results_dataframe(
+    counterfactuals: CounterfactualResults,
+    test_instances: np.ndarray,
+    nun_instances: np.ndarray
+) -> pd.DataFrame:
+    """Create the standard DataFrame used by the Evaluator from CounterfactualResults."""
+    df = counterfactuals.to_dataframe()
+    df["counterfactual"] = df["counterfactual"].apply(array_to_string)
+
+    df["Test Instance"] = [
+        next((i for i, instance in enumerate(test_instances) if np.array_equal(original, instance)), None)
+        for original in df["original_instance"]
+    ]
+
+    df["NUN Instance"] = [
+        next((i for i, instance in enumerate(nun_instances) if np.array_equal(nun, instance)), None)
+        for nun in df["nearest_unlike_neighbour"]
+    ]
+
+    df = df.rename(columns={"label": "CE Label", "counterfactual": "Solution"})
+    return df[["Solution", "Test Instance", "NUN Instance", "CE Label"]].reset_index(drop=True)
 
 
 def _flag_sets_at_least_two_true() -> List[Dict[str, bool]]:
@@ -95,7 +119,7 @@ def run_objectives_experiment(model_name: str = "fcn"):
         ]:
             label = _label_from_flags(combo)
             start_time = time.time()
-            ces_naive, ces_optimized = explainer.parallelized_counterfactual_generator(
+            counterfactuals : CounterfactualResults = explainer.generate_counterfactuals(
                 instances_to_explain=X_samples,
                 reference_data=X_train,
                 reference_weights=training_weights,
@@ -107,12 +131,13 @@ def run_objectives_experiment(model_name: str = "fcn"):
                 **combo,
             )
             total_time = time.time() - start_time
+            counterfactuals_df = create_standard_results_dataframe(counterfactuals, X_samples, X_train)
 
             _, dataset_summary = evaluator.evaluate_results(
                 model=model,
                 explainer=label,
                 dataset=dataset,
-                counterfactuals=ces_optimized,
+                counterfactuals=counterfactuals_df,
                 sample=X_samples,
                 og_labels=y_samples,
                 training_data=X_train,
@@ -120,18 +145,11 @@ def run_objectives_experiment(model_name: str = "fcn"):
                 channels=X_train.shape[2],
                 alpha=True,
                 param_config=0.5,
-                fallback_counterfactuals=ces_naive,
             )
             dataset_summary["Computation Time"] = total_time
             summary.append(dataset_summary)
 
-            ces_naive["Solution"] = ces_naive["Solution"].apply(array_to_string)
-            ces_naive.to_csv(results_dir / f"{dataset}_{label}_naive.csv", index=False)
-
-            ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
-            ces_optimized.to_csv(
-                results_dir / f"{dataset}_{label}_optimized.csv", index=False
-            )
+            counterfactuals_df.to_csv(results_dir / f"{dataset}_{label}.csv")
 
     df_summary = pd.concat(summary, ignore_index=True, sort=True)
     df_summary.to_csv(

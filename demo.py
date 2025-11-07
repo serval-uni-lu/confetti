@@ -1,8 +1,36 @@
-import config as cfg
+from paper import config as cfg
 import keras
 import paper.CAM.class_activation_map as cam
-from src.confetti.explainer.confetti_explainer import CONFETTI
-from confetti import CONFETTI, load_data, load_multivariate_ts_from_csv, array_to_string
+from confetti import CONFETTI, CounterfactualResults
+from confetti.utils import  load_data, load_multivariate_ts_from_csv, array_to_string
+import numpy as np
+import pandas as pd
+from paper.benchmark.evaluations.evaluator import Evaluator
+
+keras.utils.disable_interactive_logging()
+
+
+def create_standard_results_dataframe(
+    counterfactuals: CounterfactualResults,
+    test_instances: np.ndarray,
+    nun_instances: np.ndarray
+) -> pd.DataFrame:
+    """Create the standard DataFrame used by the Evaluator from CounterfactualResults."""
+    df = counterfactuals.to_dataframe()
+    df["counterfactual"] = df["counterfactual"].apply(array_to_string)
+
+    df["Test Instance"] = [
+        next((i for i, instance in enumerate(test_instances) if np.array_equal(original, instance)), None)
+        for original in df["original_instance"]
+    ]
+
+    df["NUN Instance"] = [
+        next((i for i, instance in enumerate(nun_instances) if np.array_equal(nun, instance)), None)
+        for nun in df["nearest_unlike_neighbour"]
+    ]
+
+    df = df.rename(columns={"label": "CE Label", "counterfactual": "Solution"})
+    return df[["Solution", "Test Instance", "NUN Instance", "CE Label"]].reset_index(drop=True)
 
 
 def run_demo(
@@ -19,6 +47,7 @@ def run_demo(
     model_path = str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras")
 
     X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
+    X_samples = X_samples[0:5]
     model = keras.models.load_model(model_path)
 
     # Load reference data
@@ -34,11 +63,7 @@ def run_demo(
 
     explainer = CONFETTI(model_path=model_path)
 
-    number_partitions = (
-        int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
-    )
-
-    _, ces_optimized = explainer.parallelized_counterfactual_generator(
+    counterfactuals: CounterfactualResults = explainer.generate_counterfactuals(
         instances_to_explain=X_samples,
         reference_data=X_train,
         reference_weights=training_weights,
@@ -49,22 +74,29 @@ def run_demo(
         optimize_proximity=optimize_proximity,
         proximity_distance=proximity_distance,
         dtw_window=dtw_window,
-        processes=6,
         verbose=True,
+        processes=6,
+        save_counterfactuals=False,
     )
 
-    ces_optimized["Solution"] = ces_optimized["Solution"].apply(array_to_string)
-
-    experiment_label = "".join(
-        [
-            "C" if optimize_confidence else "",
-            "S" if optimize_sparsity else "",
-            "P" if optimize_proximity else "",
-        ]
+    results_df = create_standard_results_dataframe(
+        counterfactuals=counterfactuals,
+        test_instances=X_samples,
+        nun_instances=X_train,
     )
+    results_df.to_csv("temp.csv", index=False)
 
-    # Save results to CSV in this directory
-    # ces_optimized.to_csv(f"demo_{dataset}_{model_name}_{experiment_label}.csv", index=False)
+    ev = Evaluator()
+    metrics, summary = ev.evaluate_from_csv(explainer="Example",
+                                            dataset="ArticularyWordRecognition",
+                                            model_name="resnet",
+                                            optional_path="temp.csv")
+    print(f"Summary:\n{summary}")
+
+
+
+
+
 
 
 def main():

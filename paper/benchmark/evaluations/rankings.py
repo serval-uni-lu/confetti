@@ -3,6 +3,8 @@ from typing import Tuple
 import pandas as pd
 import numpy as np
 import scikit_posthocs as sp
+from scipy.stats import rankdata, friedmanchisquare
+
 from paper import config as cfg
 from sklearn.preprocessing import MinMaxScaler
 
@@ -14,7 +16,7 @@ def normalize_proximity_metrics(df: pd.DataFrame) -> pd.DataFrame:
     Parameters
     ----------
     df : pd.DataFrame
-        Dataframe containing 'Dataset' and proximity metric columns:
+        Object containing 'Dataset' and proximity metric columns:
         - 'Proximity L1'
         - 'Proximity L2'
         - 'Proximity DTW'

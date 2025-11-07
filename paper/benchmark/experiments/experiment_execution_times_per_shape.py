@@ -7,15 +7,14 @@ from paper import config as cfg
 import keras
 import warnings
 import paper.CAM.class_activation_map as cam
-from src.confetti.explainer.confetti_explainer import CONFETTI
-from src.confetti.utils import load_data, load_multivariate_ts_from_csv
-import tensorflow as tf
+from confetti import CONFETTI
+from confetti.utils import load_data, load_multivariate_ts_from_csv
 import pandas as pd
 import time
 from tqdm import tqdm
 import numpy as np
 
-tf.keras.utils.disable_interactive_logging()
+keras.utils.disable_interactive_logging()
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 # Dataset properties
@@ -56,7 +55,7 @@ def run_execution_time_experiment(model_name="fcn", alpha=0.5, theta=0.51):
         X_samples, _ = load_multivariate_ts_from_csv(sample_file)
 
         # CAM weights
-        training_weights = cam.compute_weights_cam(
+        training_weights : np.ndarray = cam.compute_weights_cam(
             model=model,
             X_data=X_train,
             dataset=dataset,
@@ -73,7 +72,7 @@ def run_execution_time_experiment(model_name="fcn", alpha=0.5, theta=0.51):
             ce = CONFETTI(model_path=model_path)
 
             start = time.time()
-            _ = ce.counterfactual_generator(
+            _ = ce.generate_counterfactuals(
                 instances_to_explain=X_i,
                 reference_data=X_train,
                 reference_weights=training_weights,

@@ -25,15 +25,15 @@ from multiprocessing import Pool
 from functools import partial
 
 class CONFETTI:
-    def __init__(self, model_path: Union[None,str] = None):
+    def __init__(self, model_path: Union[None,Path,str] = None):
         """
         Initialize the CONFETTI explainer with the model and data.
         Args:
             model_path: Path to the trained model
         """
-        if not isinstance(model_path, str):
+        if not isinstance(model_path, (str,Path)):
             raise CONFETTIConfigurationError(
-                f"model_path must be a valid string path to the trained model, "
+                f"model_path must be a valid string or Path to the trained model, "
                 f"but got {type(model_path).__name__} instead."
             )
         self._model_path = model_path
@@ -495,26 +495,32 @@ class CONFETTI:
                 low = window + 1
             else:
                 objective_values.append(result.F)
-                for perturbation in result.X:
-                    perturbation_reshaped : np.ndarray = perturbation.reshape(window, query.shape[1])
-                    perturbed_instance : np.ndarray = np.copy(query)
-                    perturbed_instance[starting_point:end_point][perturbation_reshaped] = nun[
-                        starting_point:end_point
-                    ][perturbation_reshaped]
 
-                    perturbed_instance_reshaped = perturbed_instance.reshape(
-                        1, perturbed_instance.shape[0], perturbed_instance.shape[1]
-                    )
-                    counterfactual_label = np.argmax(
-                        model.predict(perturbed_instance_reshaped, verbose=False), axis=1
-                    )
+                n_samples = result.X.shape[0]
+                n_timesteps, n_features = query.shape
 
-                    counterfactual : Counterfactual = Counterfactual(
-                        counterfactual = perturbed_instance_reshaped,
-                        label = counterfactual_label[0]
-                    )
+                results_reshaped : np.ndarray = result.X.reshape(n_samples, window, n_features)
+                perturbations : np.ndarray = np.tile(query, (n_samples, 1, 1))
+                replacement_patch : np.ndarray = nun[starting_point:end_point]
 
-                    all_counterfactuals.append(counterfactual)
+                replacement_patch_broadcast : np.ndarray = np.broadcast_to(
+                    replacement_patch, (n_samples, window, n_features)
+                )
+
+                perturbations[:, starting_point:end_point, :] = np.where(
+                    results_reshaped,
+                    replacement_patch_broadcast,
+                    perturbations[:, starting_point:end_point, :],
+                )
+
+                predictions = model.predict(perturbations, verbose=False)
+                predicted_labels = np.argmax(predictions, axis=1)
+
+
+                all_counterfactuals.extend(
+                    Counterfactual(counterfactual=cf, label=label)
+                    for cf, label in zip(perturbations, predicted_labels)
+                )
 
                 high = window - 1
             final_time = time.time() - start_time
@@ -527,7 +533,6 @@ class CONFETTI:
 
         objectives_array: np.ndarray = np.vstack(objective_values)
         if optimize_confidence and optimize_sparsity:
-            # Best Counterfactual only applies when optimizing confidence and sparsity (alpha)
             best = self._select_best_solution(all_counterfactuals, objectives_array, alpha)
         else:
             best = None
@@ -1176,7 +1181,7 @@ class CONFETTI:
         objective_values_flipped = objective_values[:, :2]
         objective_values_flipped[:, 0] = -objective_values_flipped[:, 0]
 
-        weights = np.ndarray([alpha, 1 - alpha])
+        weights = np.array([alpha, 1 - alpha])
 
         scores = np.dot(objective_values_flipped, weights)
         best_index = np.argmax(scores)
