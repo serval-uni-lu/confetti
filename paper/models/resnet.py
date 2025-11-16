@@ -185,7 +185,7 @@ class ClassifierRESNET:
 
         return df_metrics
 
-    def predict(self, x_test, y_true, return_df_metrics=True):
+    def predict(self, x_test, y_true, return_df_metrics=False):
 
         model_path = self.output_directory / f"{self.dataset_name}_resnet.keras"
         model = keras.models.load_model(model_path)
@@ -196,3 +196,9 @@ class ClassifierRESNET:
             return df_metrics
         else:
             return y_pred
+
+    def predict_proba(self, x_test):
+        model_path = self.output_directory / f"{self.dataset_name}_resnet.keras"
+        model = keras.models.load_model(model_path)
+        y_pred = model.predict(x_test)
+        return y_pred

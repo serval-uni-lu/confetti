@@ -24,12 +24,26 @@ dependencies = [
     "webcolors==24.11.1",
     "xlsxwriter==3.2.9",
 ]
+[tool.setuptools]
+package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv.sources]
+borf = { git = "https://github.com/DawidPludowski/borf.git", rev = "xai-improvements" }
+critdd = { git = "https://github.com/mirkobunse/critdd" }
 
 [dependency-groups]
 dev = [
     "ruff>=0.14.1",
     "ty>=0.0.1a25",
+]
+mascots = [
+    "borf",
+    "gpytorch>=1.14.2",
+    "pytorch-lightning>=2.5.6",
+]
+paper = [
+    "critdd",
 ]

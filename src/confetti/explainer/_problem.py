@@ -3,7 +3,7 @@ from typing import Optional
 import numpy as np
 import importlib
 from confetti.errors import CONFETTIConfigurationError
-
+import time
 
 
 class CounterfactualProblem(Problem):
@@ -92,6 +92,8 @@ class CounterfactualProblem(Problem):
         n_obj: int = (
             int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
         )
+        self.iterations = 0
+        self.batches: np.ndarray = np.array([])
 
         super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=1)
 
@@ -124,7 +126,6 @@ class CounterfactualProblem(Problem):
         )
 
         f1, f2, f3 = None, None, None
-
         f1 = self.classifier.predict(counterfactuals)[:, self.reference_labels[self.nun_index]]
         out["G"] = [self.theta - f1]
 

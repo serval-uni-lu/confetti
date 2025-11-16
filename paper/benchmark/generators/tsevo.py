@@ -2,6 +2,7 @@ import numpy as np
 import keras
 import pandas as pd
 import time
+import joblib
 from tqdm import tqdm
 from TSInterpret.InterpretabilityModels.counterfactual.TSEvoCF import TSEvo
 from src.confetti.utils import (
@@ -15,12 +16,16 @@ keras.utils.disable_interactive_logging()
 
 
 def run_tsevo_counterfactuals(model_name=None):
-    datasets = cfg.DATASETS
+    datasets = ["ERing"]
     times = {}
 
     for dataset in tqdm(datasets, desc="Processing datasets"):
-        model_path = cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras"
-        model = keras.models.load_model(str(model_path))
+        if model_name == "logistic":
+            model_path = cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_logistic.joblib"
+            model = joblib.load(model_path)
+        else:
+            model_path = cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras"
+            model = keras.models.load_model(str(model_path))
 
         X_train, X_test, y_train, y_test = load_data(dataset, one_hot=True)
         reference_labels = np.argmax(model.predict(X_train), axis=1)
@@ -64,6 +69,7 @@ def run_tsevo_counterfactuals(model_name=None):
         end_time = time.time()
         times[dataset] = end_time - start_time
 
+        """
         results_df["Solution"] = results_df["Solution"].apply(array_to_string)
         results_directory = cfg.RESULTS_DIR / dataset
         results_directory.mkdir(parents=True, exist_ok=True)
@@ -78,13 +84,13 @@ def run_tsevo_counterfactuals(model_name=None):
         times.items(), columns=["Dataset", "Execution Time (seconds)"]
     )
     times_df.to_csv(
-        results_directory / f"execution_time_{model_name}_tsevo.csv", index=False
+        results_directory / f"execution_time_tsevo_{model_name}.csv", index=False
     )
-    print("Execution times saved.")
+    print("Execution times saved.")"""
 
 
 def main():
-    run_tsevo_counterfactuals(model_name="resnet")
+    run_tsevo_counterfactuals(model_name="logistic")
 
 
 if __name__ == "__main__":

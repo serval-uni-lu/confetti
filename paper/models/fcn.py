@@ -89,3 +89,7 @@ class ClassifierFCN:
         y_pred = self.model.predict(x_test)
         y_pred = np.argmax(y_pred, axis=1)
         return y_pred
+
+    def predict_proba(self, x_test):
+        y_pred = self.model.predict(x_test)
+        return y_pred

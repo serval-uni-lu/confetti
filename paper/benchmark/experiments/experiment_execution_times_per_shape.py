@@ -13,7 +13,7 @@ import pandas as pd
 import time
 from tqdm import tqdm
 import numpy as np
-
+import joblib
 keras.utils.disable_interactive_logging()
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -39,15 +39,22 @@ ts_dimensions = {
 
 
 def run_execution_time_experiment(model_name="fcn", alpha=0.5, theta=0.51):
+    output_dir = cfg.EXPERIMENT_EXECUTION_TIMES_PER_SHAPE
     results = []
 
     for dataset in cfg.DATASETS:
         print(f"Running {dataset}...")
         # Load model and data
-        model_path = str(
-            cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras"
-        )
-        model = keras.models.load_model(model_path)
+        if model_name == "logistic":
+            model_path = str(
+                cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_logistic.joblib"
+            )
+            model = joblib.load(model_path)
+        else:
+            model_path = str(
+                cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras"
+            )
+            model = keras.models.load_model(model_path)
         X_train, _, _, _ = load_data(dataset, one_hot=False)
 
         # Load precomputed samples for this dataset-model
@@ -55,13 +62,16 @@ def run_execution_time_experiment(model_name="fcn", alpha=0.5, theta=0.51):
         X_samples, _ = load_multivariate_ts_from_csv(sample_file)
 
         # CAM weights
-        training_weights : np.ndarray = cam.compute_weights_cam(
-            model=model,
-            X_data=X_train,
-            dataset=dataset,
-            save_weights=False,
-            data_type="training",
-        )
+        if model_name != "logistic":
+            training_weights : None | np.ndarray = cam.compute_weights_cam(
+                model=model,
+                X_data=X_train,
+                dataset=dataset,
+                save_weights=False,
+                data_type="training",
+            )
+        else:
+            training_weights = None
 
         instance_times = []
         for i in tqdm(
@@ -87,6 +97,7 @@ def run_execution_time_experiment(model_name="fcn", alpha=0.5, theta=0.51):
         avg_time = np.mean(instance_times)
         results.append(
             {
+                "Model": model_name,
                 "Dataset": dataset,
                 "Length": ts_lengths.get(dataset),
                 "Dimension": ts_dimensions.get(dataset),
@@ -95,8 +106,10 @@ def run_execution_time_experiment(model_name="fcn", alpha=0.5, theta=0.51):
         )
 
     df = pd.DataFrame(results)
-    df.to_csv("execution_time_average.csv", index=False)
+    df.to_csv(output_dir / f"execution_times_per_shape_{model_name}", index=False)
 
 
 if __name__ == "__main__":
-    run_execution_time_experiment()
+    run_execution_time_experiment(model_name="fcn")
+    run_execution_time_experiment(model_name="resnet")
+    run_execution_time_experiment(model_name="logistic")

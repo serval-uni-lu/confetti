@@ -9,11 +9,14 @@ TRAINED_MODELS_DIR = MODELS_DIR / "trained_models"
 CAM_WEIGHTS_DIR = TRAINED_MODELS_DIR
 RESULTS_DIR = BASE_DIR / "results"
 DATA_DIR = BASE_DIR / "benchmark" / "data"
+
 EVALUATIONS_FILE = BASE_DIR / "benchmark" / "evaluations" / "all_evaluation_results.csv"
 EXPERIMENT_PROXIMITY_METRIC = (
     BASE_DIR / "benchmark" / "experiments" / "proximity_metric_results"
 )
 EXPERIMENT_OBJECTIVES = BASE_DIR / "benchmark" / "experiments" / "objectives_results"
+EXPERIMENT_EXECUTION_TIMES_PER_SHAPE = BASE_DIR / "benchmark" / "experiments" / "execution_times_per_shape_results"
+EXPERIMENT_ABLATION_STUDY = BASE_DIR / "benchmark" / "experiments" / "ablation_study_results"
 
 NUMBER_OF_SAMPLES_PER_CLASS = {
     "ArticularyWordRecognition": 1,
@@ -49,8 +52,8 @@ FIXED_ALPHA = 0.50
 FIXED_THETA = 0.51
 
 # default hyperparameter grids
-_DEFAULT_ALPHAS = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
-_DEFAULT_THETAS = [0.55, 0.65, 0.75, 0.85, 0.95]
+_DEFAULT_ALPHAS = [0.0, 0.3, 0.5, 0.7, 1.0]
+_DEFAULT_THETAS = [0.55, 0.75, 0.95]
 
 # checkpoint dict for “breaks” logic
 CHECK_POINT = {
@@ -70,6 +73,10 @@ CHECK_POINT = {
         "alphas": _DEFAULT_ALPHAS.copy(),
         "thetas": _DEFAULT_THETAS.copy(),
     },
+}
+
+ABLATION_CHECK_POINT = {
+    "datasets": DATASETS.copy(),
 }
 
 TS_LENGTHS = {

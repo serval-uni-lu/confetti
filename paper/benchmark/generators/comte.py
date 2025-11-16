@@ -4,12 +4,13 @@ import pandas as pd
 import time
 from tqdm import tqdm
 from TSInterpret.InterpretabilityModels.counterfactual.COMTECF import COMTECF
-from src.confetti.utils import (
+from confetti.utils import (
     load_data,
     load_multivariate_ts_from_csv,
     array_to_string,
 )
 from paper import config as cfg
+import joblib
 
 keras.utils.disable_interactive_logging()
 
@@ -29,12 +30,21 @@ def run_comte_counterfactuals(model_name=None):
 
     for dataset in tqdm(datasets, desc="Processing datasets"):
         X_train, X_test, y_train, y_test = load_data(dataset, one_hot=True)
+        print(f"Loaded {dataset} data.")
 
-        model_path = cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras"
-        model = keras.models.load_model(str(model_path))
+        if model_name == "logistic":
+            model_path = cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_logistic.joblib"
+            model = joblib.load(model_path)
+            print(f"Loaded MiniRocket + Logistic model for dataset {dataset}.")
+        else:
+            model_path = cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras"
+            model = keras.models.load_model(str(model_path))
+            print(f"Loaded {model_name} model for dataset {dataset}.")
 
         # Reference labels are the predicted labels for the training set. NOT the ground truth labels.
         reference_labels = np.argmax(model.predict(X_train), axis=1)
+        print(f"Reference labels obtained from {model_name} model.")
+
 
         sample_file = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
         X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
@@ -66,7 +76,6 @@ def run_comte_counterfactuals(model_name=None):
             try:
                 exp = exp_model.explain(item)
                 array, label = exp
-
                 org_label = np.argmax(y_target)
                 cf_label = label[0]
                 exp = np.array(array)
@@ -112,7 +121,7 @@ def run_comte_counterfactuals(model_name=None):
 
 
 def main():
-    run_comte_counterfactuals(model_name="resnet")
+    run_comte_counterfactuals(model_name="logistic")
 
 
 if __name__ == "__main__":

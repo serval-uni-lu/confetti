@@ -6,11 +6,9 @@ from sklearn.preprocessing import MinMaxScaler
 from paper import config as cfg
 
 
-# TODO: Delete this file
-
 
 def debug_three_methods(df, metric, group_col="Dataset", explainer_col="Explainer"):
-    methods_of_interest = ["Confetti α=0.0", "Confetti α=0.5", "Ablation Study α=0.0"]
+    methods_of_interest = ["Confetti α=0.0", "Confetti α=0.5", "Confetti θ=0.95"]
 
     wide = (
         df.loc[
@@ -56,6 +54,80 @@ def normalize_proximity_metrics(df: pd.DataFrame) -> pd.DataFrame:
             lambda x: MinMaxScaler().fit_transform(x.values.reshape(-1, 1)).flatten()
         )
     return data
+
+
+
+def strict_significance_ranking(
+    df: pd.DataFrame, alpha: float = 0.05, method_kw: str = "exact"
+) -> pd.DataFrame:
+    """
+    Rank methods based on strict dominance.
+
+    A method A is ranked higher than a method B only if both conditions hold:
+    1) For every dataset, A's score is greater than B's score.
+    2) The Wilcoxon test across datasets between A and B is significant
+       (p <= alpha).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing one column named 'Dataset' and one column per method.
+    alpha : float
+        Significance threshold for the Wilcoxon test.
+    method_kw : str
+        Either 'exact' or 'asymptotic', passed to `scipy.stats.wilcoxon`.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame representing the ranking under strict dominance.
+    """
+
+    methods = [c for c in df.columns if c != "Dataset" and "Unnamed" not in c]
+
+    def strictly_better(m1, m2):
+        x = df[m1]
+        y = df[m2]
+        # Remove datasets where either value is NaN
+        mask = ~(x.isna() | y.isna())
+        x = x[mask].values
+        y = y[mask].values
+        # If no data left, cannot compare
+        if len(x) == 0:
+            return False
+        # Check strict dominance on the remaining datasets
+        if not np.all(x > y):
+            return False
+        # Wilcoxon test
+        stat = wilcoxon(x, y, alternative="greater", method=method_kw)
+        return stat.pvalue <= alpha
+
+    # Build dominance relationships
+    dominance = {m: set() for m in methods}
+    for m1 in methods:
+        for m2 in methods:
+            if m1 == m2:
+                continue
+            if strictly_better(m1, m2):
+                dominance[m1].add(m2)
+
+    # Compute ranks using layers of dominance
+    remaining = set(methods)
+    rank = 1
+    ranks = {}
+    while remaining:
+        current_rank = []
+        for m in remaining:
+            if not any((m in dominance[o]) for o in remaining if o != m):
+                current_rank.append(m)
+        for m in current_rank:
+            ranks[m] = rank
+        remaining -= set(current_rank)
+        rank += 1
+
+    return pd.DataFrame(
+        {"Method": list(ranks.keys()), "rank": list(ranks.values())}
+    ).sort_values("rank")
 
 
 def significance_ranking(
@@ -118,110 +190,20 @@ def significance_ranking(
     return out.sort_values("rank")
 
 
-def strict_significance_ranking(
-    df: pd.DataFrame, alpha: float = 0.05, method_kw: str = "exact"
-) -> pd.DataFrame:
-    """
-    Rank methods based on strict dominance:
-    Method A is ranked higher than Method B only if:
-      1) For every dataset, A's score > B's score
-      2) The Wilcoxon test across datasets between A and B is significant (p <= alpha)
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with one column 'Dataset' and one column per method.
-    alpha : float
-        Significance threshold.
-    method_kw : str
-        'exact' or 'asymptotic' for scipy.stats.wilcoxon.
-
-    Returns
-    -------
-    pd.DataFrame
-        Columns: Method | rank
-    """
-    methods = [c for c in df.columns if c != "Dataset" and "Unnamed" not in c]
-
-    def strictly_better(m1, m2):
-        x = df[m1]
-        y = df[m2]
-        # Remove datasets where either value is NaN
-        mask = ~(x.isna() | y.isna())
-        x = x[mask].values
-        y = y[mask].values
-        # If no data left, cannot compare
-        if len(x) == 0:
-            return False
-        # Check strict dominance on the remaining datasets
-        if not np.all(x > y):
-            return False
-        # Wilcoxon test
-        stat = wilcoxon(x, y, alternative="greater", method=method_kw)
-        return stat.pvalue <= alpha
-
-    # Build dominance relationships
-    dominance = {m: set() for m in methods}
-    for m1 in methods:
-        for m2 in methods:
-            if m1 == m2:
-                continue
-            if strictly_better(m1, m2):
-                dominance[m1].add(m2)
-
-    # Compute ranks using layers of dominance
-    remaining = set(methods)
-    rank = 1
-    ranks = {}
-    while remaining:
-        current_rank = []
-        for m in remaining:
-            if not any((m in dominance[o]) for o in remaining if o != m):
-                current_rank.append(m)
-        for m in current_rank:
-            ranks[m] = rank
-        remaining -= set(current_rank)
-        rank += 1
-
-    return pd.DataFrame(
-        {"Method": list(ranks.keys()), "rank": list(ranks.values())}
-    ).sort_values("rank")
-
-
-def overall_scores(results: Optional[pd.DataFrame] = None, ablation: bool = False):
+def overall_scores(results: Optional[pd.DataFrame] = None):
     if results:
         df = results.copy()
     else:
         df = pd.read_csv(cfg.EVALUATIONS_FILE)
-    # ---- setup ---------------------------------------------------------------
-    confetti_method_map = {
-        "Confetti Optimized (alpha=0.5)": "Confetti α=0.5",
-        "Confetti Optimized (theta=0.95)": "Confetti θ=0.95",
-        "Confetti Optimized (alpha=0.0)": "Confetti α=0.0",
-        "Ablation Study (alpha=0.5)": "Ablation Study α=0.5",
-        "Ablation Study (theta=0.95)": "Ablation Study θ=0.95",
-        "Ablation Study (alpha=0.0)": "Ablation Study α=0.0",
-    }
 
     core_explainers = ["Comte", "TSEvo", "Sets"]
 
-    if ablation:
-        confetti_method_map = {
-            "Confetti Optimized (alpha=0.5)": "Confetti α=0.5",
-            "Confetti Optimized (theta=0.95)": "Confetti θ=0.95",
-            "Confetti Optimized (alpha=0.0)": "Confetti α=0.0",
-            "Ablation Study (alpha=0.5)": "Ablation Study α=0.5",
-            "Ablation Study (theta=0.95)": "Ablation Study θ=0.95",
-            "Ablation Study (alpha=0.0)": "Ablation Study α=0.0",
-        }
-        allowed = list(confetti_method_map.keys())
-    else:
-        confetti_method_map = {
-            "Confetti Optimized (alpha=0.5)": "Confetti α=0.5",
-            "Confetti Optimized (theta=0.95)": "Confetti θ=0.95",
-            "Confetti Optimized (alpha=0.0)": "Confetti α=0.0",
-        }
-        allowed = core_explainers + list(confetti_method_map.keys())
+    confetti_method_map = {
+            "Confetti (alpha=0.5)": "Confetti α=0.5",
+            "Confetti (theta=0.95)": "Confetti θ=0.95",
+            "Confetti (alpha=0.0)": "Confetti α=0.0",
+    }
+    allowed = core_explainers + list(confetti_method_map.keys())
     cleaned = df[df["Explainer"].isin(allowed)].copy()
 
     cleaned["Explainer"] = cleaned["Explainer"].replace(confetti_method_map)
@@ -235,6 +217,9 @@ def overall_scores(results: Optional[pd.DataFrame] = None, ablation: bool = Fals
     debug_three_methods(resnet_results, metric="Proximity L2 Norm")
     debug_three_methods(resnet_results, metric="Proximity L1 Norm")
     debug_three_methods(resnet_results, metric="Proximity DTW Norm")
+    debug_three_methods(fcn_results, metric="Proximity L2 Norm")
+    debug_three_methods(fcn_results, metric="Proximity L1 Norm")
+    debug_three_methods(fcn_results, metric="Proximity DTW Norm")
 
     # hb: Higher is Better
     metric_hb_map = {
@@ -274,27 +259,21 @@ def overall_scores(results: Optional[pd.DataFrame] = None, ablation: bool = Fals
         print(table_fcn)
 
 
-def sparsity_ranks(results: Optional[pd.DataFrame] = None, ablation: bool = False):
+def sparsity_ranks(results: Optional[pd.DataFrame] = None):
     if results:
         df = results.copy()
     else:
         df = pd.read_csv(cfg.EVALUATIONS_FILE)
     # ---- setup ---------------------------------------------------------------
     confetti_method_map = {
-        "Confetti Optimized (alpha=0.5)": "Confetti α=0.5",
-        "Confetti Optimized (theta=0.95)": "Confetti θ=0.95",
-        "Confetti Optimized (alpha=0.0)": "Confetti α=0.0",
-        "Ablation Study (alpha=0.5)": "Ablation Study α=0.5",
-        "Ablation Study (theta=0.95)": "Ablation Study θ=0.95",
-        "Ablation Study (alpha=0.0)": "Ablation Study α=0.0",
+        "Confetti (alpha=0.5)": "Confetti α=0.5",
+        "Confetti (theta=0.95)": "Confetti θ=0.95",
+        "Confetti (alpha=0.0)": "Confetti α=0.0",
     }
 
     core_explainers = ["Comte", "TSEvo", "Sets"]
 
-    if ablation:
-        allowed = list(confetti_method_map.keys())
-    else:
-        allowed = core_explainers + list(confetti_method_map.keys())
+    allowed = core_explainers + list(confetti_method_map.keys())
     cleaned = df[df["Explainer"].isin(allowed)].copy()
 
     cleaned["Explainer"] = cleaned["Explainer"].replace(confetti_method_map)
@@ -333,27 +312,21 @@ def sparsity_ranks(results: Optional[pd.DataFrame] = None, ablation: bool = Fals
     print(sparsity_scores)
 
 
-def confidence_ranks(results: Optional[pd.DataFrame] = None, ablation: bool = False):
+def confidence_ranks(results: Optional[pd.DataFrame] = None):
     if results:
         df = results.copy()
     else:
         df = pd.read_csv(cfg.EVALUATIONS_FILE)
     # ---- setup ---------------------------------------------------------------
     confetti_method_map = {
-        "Confetti Optimized (alpha=0.5)": "Confetti α=0.5",
-        "Confetti Optimized (theta=0.95)": "Confetti θ=0.95",
-        "Confetti Optimized (alpha=0.0)": "Confetti α=0.0",
-        "Ablation Study (alpha=0.5)": "Ablation Study α=0.5",
-        "Ablation Study (theta=0.95)": "Ablation Study θ=0.95",
-        "Ablation Study (alpha=0.0)": "Ablation Study α=0.0",
+        "Confetti (alpha=0.5)": "Confetti α=0.5",
+        "Confetti (theta=0.95)": "Confetti θ=0.95",
+        "Confetti (alpha=0.0)": "Confetti α=0.0"
     }
 
     core_explainers = ["Comte", "TSEvo", "Sets"]
 
-    if ablation:
-        allowed = list(confetti_method_map.keys())
-    else:
-        allowed = core_explainers + list(confetti_method_map.keys())
+    allowed = core_explainers + list(confetti_method_map.keys())
     cleaned = df[df["Explainer"].isin(allowed)].copy()
 
     # ---- 2. rename the Confetti variants ------------------------------------
@@ -396,109 +369,10 @@ def confidence_ranks(results: Optional[pd.DataFrame] = None, ablation: bool = Fa
     print(confidence_scores)
 
 
-def time_ranks(results: Optional[pd.DataFrame] = None):
-    if results is not None:
-        exec_times = results.copy()
-    else:
-        exec_times_resnet = pd.read_csv(
-            cfg.RESULTS_DIR / "execution_times_confetti_resnet.csv"
-        )
-        exec_times_resnet["Model"] = "resnet"
-
-        exec_times_fcn = pd.read_csv(
-            cfg.RESULTS_DIR / "execution_times_confetti_fcn.csv"
-        )
-        exec_times_fcn["Model"] = "fcn"
-
-        exec_times_resnet_abl = pd.read_csv(
-            cfg.RESULTS_DIR / "execution_times_confetti_resnet_ablation_study.csv"
-        )
-        exec_times_resnet_abl["Model"] = "Ablation ResNet"
-
-        exec_times_fcn_abl = pd.read_csv(
-            cfg.RESULTS_DIR / "execution_times_confetti_fcn_ablation_study.csv"
-        )
-        exec_times_fcn_abl["Model"] = "Ablation FCN"
-
-        exec_times = pd.concat(
-            [
-                exec_times_resnet,
-                exec_times_fcn,
-                exec_times_resnet_abl,
-                exec_times_fcn_abl,
-            ],
-            ignore_index=True,
-        )
-
-        exec_times["Config"] = exec_times.apply(
-            lambda row: f"α={row.Alpha}, θ={row.Theta}", axis=1
-        )
-
-    # --- Collect results for ResNet vs Ablation ResNet ---
-    resnet_results = []
-    for dataset in exec_times["Dataset"].unique():
-        subset = exec_times[
-            (exec_times["Dataset"] == dataset)
-            & (exec_times["Model"].isin(["ResNet", "Ablation ResNet"]))
-        ]
-
-        if subset.empty:
-            continue
-
-        res = significance_ranking(
-            df=subset,
-            metric="Execution Time",
-            higher_better=False,
-            alpha=0.05,
-            method_kw="exact",
-            group_col="Config",
-            explainer_col="Model",
-        )
-        res.insert(0, "Dataset", dataset)
-        resnet_results.append(res)
-
-    resnet_results = pd.concat(resnet_results, ignore_index=True)
-
-    # --- Collect results for FCN vs Ablation FCN ---
-    fcn_results = []
-    for dataset in exec_times["Dataset"].unique():
-        subset = exec_times[
-            (exec_times["Dataset"] == dataset)
-            & (exec_times["Model"].isin(["FCN", "Ablation FCN"]))
-        ]
-
-        if subset.empty:
-            continue
-
-        res = significance_ranking(
-            df=subset,
-            metric="Execution Time",
-            higher_better=False,
-            alpha=0.05,
-            method_kw="exact",
-            group_col="Config",
-            explainer_col="Model",
-        )
-        res.insert(0, "Dataset", dataset)
-        fcn_results.append(res)
-
-    fcn_results = pd.concat(fcn_results, ignore_index=True)
-
-    # --- Print tables ---
-    print("\n=== ResNet vs Ablation ResNet ===")
-    print(resnet_results)
-
-    print("\n=== FCN vs Ablation FCN ===")
-    print(fcn_results)
-
-    return resnet_results, fcn_results
-
-
 def main():
-    overall_scores(ablation=True)
-    sparsity_ranks(ablation=True)
-    confidence_ranks(ablation=True)
-    time_ranks()
+    overall_scores()
+    sparsity_ranks()
+    confidence_ranks()
 
 
 if __name__ == "__main__":

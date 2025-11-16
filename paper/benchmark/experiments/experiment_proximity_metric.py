@@ -19,7 +19,6 @@ import numpy as np
 keras.utils.disable_interactive_logging()
 
 
-# TODO: Perform statistical tests and rankings at the end of the experiment
 
 def create_standard_results_dataframe(
     counterfactuals: CounterfactualResults,
@@ -28,7 +27,8 @@ def create_standard_results_dataframe(
 ) -> pd.DataFrame:
     """Create the standard DataFrame used by the Evaluator from CounterfactualResults."""
     df = counterfactuals.to_dataframe()
-    df["counterfactual"] = df["counterfactual"].apply(array_to_string)
+    df["counterfactual"] = df["counterfactual"].apply(lambda x: x.squeeze(0) if x.ndim == 3 and x.shape[0] == 1 else x)
+    df = df[df["is_best"]]
 
     df["Test Instance"] = [
         next((i for i, instance in enumerate(test_instances) if np.array_equal(original, instance)), None)
@@ -86,6 +86,7 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
                 reference_weights=training_weights,
                 alpha=0.5,
                 theta=0.51,
+                optimize_proximity=True,
                 proximity_distance=metric,
                 processes=8,
                 verbose=False,
@@ -93,8 +94,6 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
             total_time = time.time() - start_time
 
             counterfactuals_df = create_standard_results_dataframe(counterfactuals, X_samples, X_train)
-
-            #TODO: Create the counterfactual dataframe that Evaluator needs
 
             _, dataset_summary = evaluator.evaluate_results(
                 model=model,
@@ -113,7 +112,7 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
             dataset_summary["Computation Time"] = total_time
             summary.append(dataset_summary)
 
-
+            counterfactuals_df["Solution"] = counterfactuals_df["Solution"].apply(array_to_string)
             counterfactuals_df.to_csv(results_dir / f"{dataset}_{metric}.csv")
 
             if metric == "dtw":
@@ -132,6 +131,7 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
                             reference_weights=training_weights,
                             alpha=0.5,
                             theta=0.51,
+                            optimize_proximity=True,
                             proximity_distance=metric,
                             dtw_window=dtw_window,
                             processes=8,
@@ -159,8 +159,7 @@ def run_proximity_metric_experiment(model_name: str = "fcn"):
                     dataset_summary["Computation Time"] = total_time
 
                     summary.append(dataset_summary)
-
-                    # TODO: Check this
+                    counterfactuals_df["Solution"] = counterfactuals_df["Solution"].apply(array_to_string)
                     counterfactuals_df.to_csv(results_dir / f"{dataset}_{metric}_{dtw_window}.csv")
 
     df_summary = pd.concat(summary, ignore_index=True, sort=True)

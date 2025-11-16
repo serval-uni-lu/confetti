@@ -91,6 +91,7 @@ def get_samples(dataset, one_hot=False):
 def get_predicted_samples(
     dataset: str,
     model: Any,
+    model_name: str,
     one_hot: bool = False,
     rng: np.random.Generator | None = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -123,7 +124,7 @@ def get_predicted_samples(
     X_train, X_test, y_train, _ = load_data(dataset, one_hot=one_hot)
 
     # ── 2. Predict labels ──────────────────────────────────────────────────────
-    y_pred_prob = model.predict(X_test, verbose=0)
+    y_pred_prob = model.predict(X_test)
     y_pred = (
         np.argmax(y_pred_prob, axis=1)
         if y_pred_prob.ndim > 1

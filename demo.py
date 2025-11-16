@@ -6,7 +6,7 @@ from confetti.utils import  load_data, load_multivariate_ts_from_csv, array_to_s
 import numpy as np
 import pandas as pd
 from paper.benchmark.evaluations.evaluator import Evaluator
-
+import joblib
 keras.utils.disable_interactive_logging()
 
 
@@ -17,7 +17,6 @@ def create_standard_results_dataframe(
 ) -> pd.DataFrame:
     """Create the standard DataFrame used by the Evaluator from CounterfactualResults."""
     df = counterfactuals.to_dataframe()
-    df["counterfactual"] = df["counterfactual"].apply(array_to_string)
 
     df["Test Instance"] = [
         next((i for i, instance in enumerate(test_instances) if np.array_equal(original, instance)), None)
@@ -35,24 +34,24 @@ def create_standard_results_dataframe(
 
 def run_demo(
     model_name: str = "fcn",
-    optimize_confidence: bool = True,
-    optimize_sparsity: bool = True,
-    optimize_proximity: bool = True,
     proximity_distance: str = "euclidean",
     dtw_window: int = None,
-    dataset: str = "ArticularyWordRecognition",
+    dataset: str = "Libras",
 ):
     # Load samples and model
     sample_file = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
+
     model_path = str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras")
+    model = keras.models.load_model(model_path)
 
     X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
     X_samples = X_samples[0:5]
-    model = keras.models.load_model(model_path)
+
 
     # Load reference data
     X_train, _, y_train, _ = load_data(dataset, one_hot=False)
 
+    # Compute CAM weights for reference data
     training_weights = cam.compute_weights_cam(
         model=model,
         X_data=X_train,
@@ -60,6 +59,7 @@ def run_demo(
         save_weights=False,
         data_type="training",
     )
+
 
     explainer = CONFETTI(model_path=model_path)
 
@@ -69,13 +69,10 @@ def run_demo(
         reference_weights=training_weights,
         alpha=0.5,
         theta=0.51,
-        optimize_confidence=optimize_confidence,
-        optimize_sparsity=optimize_sparsity,
-        optimize_proximity=optimize_proximity,
         proximity_distance=proximity_distance,
         dtw_window=dtw_window,
         verbose=True,
-        processes=6,
+        processes=4,
         save_counterfactuals=False,
     )
 
@@ -84,23 +81,21 @@ def run_demo(
         test_instances=X_samples,
         nun_instances=X_train,
     )
-    results_df.to_csv("temp.csv", index=False)
+
 
     ev = Evaluator()
-    metrics, summary = ev.evaluate_from_csv(explainer="Example",
-                                            dataset="ArticularyWordRecognition",
-                                            model_name="resnet",
+    metrics, summary = ev.evaluate_from_csv(explainer="Confetti",
+                                            dataset=dataset,
+                                            model_name="fcn",
                                             optional_path="temp.csv")
     print(f"Summary:\n{summary}")
 
-
-
-
-
+    results_df["Solution"] = results_df["Solution"].apply(array_to_string)
+    results_df.to_csv("temp.csv", index=False)
 
 
 def main():
-    run_demo()
+    run_demo(model_name="fcn")
 
 
 if __name__ == "__main__":

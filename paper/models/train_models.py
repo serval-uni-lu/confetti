@@ -1,7 +1,9 @@
 from paper.models.resnet import ClassifierRESNET
 from paper.models.fcn import ClassifierFCN
+from paper.models.logistic import MiniRocketLogisticModel
 from src.confetti.utils import load_data
 import numpy as np
+import joblib
 from paper import config as cfg
 import keras
 
@@ -36,7 +38,15 @@ def train_model(model_name: str):
                 dataset_name=dataset,
                 verbose=True,
             )
-        else:
+            print("Model created successfully.")
+            print("Training starting...")
+            model.fit(
+                x_train=X_train,
+                y_train=y_train_encoded,
+                x_test=X_test,
+                y_test=y_test_encoded,
+            )
+        elif model_name == "resnet":
             print("Creating ResNet model...")
             model = ClassifierRESNET(
                 output_directory=output_dir,
@@ -45,21 +55,36 @@ def train_model(model_name: str):
                 dataset_name=dataset,
                 verbose=True,
             )
-        print("Model created successfully.")
-        print("Training starting...")
-        model.fit(
-            x_train=X_train,
-            y_train=y_train_encoded,
-            x_val=X_test,
-            y_val=y_test_encoded,
-            y_true=y_test,
-        )  # y_true is used for metrics calculation
+            print("Model created successfully.")
+            print("Training starting...")
+            model.fit(
+                x_train=X_train,
+                y_train=y_train_encoded,
+                x_val=X_test,
+                y_val=y_test_encoded,
+                y_true=y_test,
+            )
+        else:
+            model = MiniRocketLogisticModel()
+            print("Model created successfully.")
+            print("Training starting...")
+            model.fit(X_train, y_train)
+            print("Training completed.")
+            score = model.score(X_test, y_test)
+            print(f"Model score on test data: {score}")
+            # Save model
+            joblib.dump(model, output_dir / f"{dataset}_{model_name}.joblib")
+
+
+
 
 
 def main():
     # This script will train FCN and ResNet models for all datasets.
     train_model("fcn")
     train_model("resnet")
+    #train_model("logistic")
+
 
 
 if __name__ == "__main__":

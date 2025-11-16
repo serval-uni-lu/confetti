@@ -9,6 +9,7 @@ import copy
 from pathlib import Path
 import numpy as np
 import pandas as pd
+import joblib
 
 import keras
 from tslearn.neighbors import KNeighborsTimeSeries
@@ -37,7 +38,11 @@ class CONFETTI:
                 f"but got {type(model_path).__name__} instead."
             )
         self._model_path = model_path
-        self._model = keras.models.load_model(model_path)
+        if model_path is not None:
+            if str(model_path).endswith(".joblib"):
+                self._model = joblib.load(str(model_path))
+            else:
+                self._model = keras.models.load_model(model_path)
 
         self._instances_to_explain: Optional[np.ndarray] = None
         self._original_labels: Optional[np.ndarray] = None
@@ -47,7 +52,7 @@ class CONFETTI:
         self.nuns: List[int] = []
 
     @property
-    def model_path(self) -> str:
+    def model_path(self) -> None | str:
         return self._model_path
 
     @property
@@ -128,9 +133,9 @@ class CONFETTI:
 
     @weights.setter
     def weights(self, weights: None | np.ndarray) -> None:
-        if not isinstance(weights, np.ndarray):
+        if not isinstance(weights, (np.ndarray, type(None))):
             raise CONFETTIDataTypeError(
-                message=f"weights must be a numpy ndarray, but got {type(weights).__name__} instead.",
+                message=f"weights must be a numpy ndarray or None, but got {type(weights).__name__} instead.",
                 param="weights",
                 source="weights setter"
             )
@@ -301,9 +306,7 @@ class CONFETTI:
             1, perturbed_instance.shape[0], perturbed_instance.shape[1]
         )
 
-        prob_target = model.predict(perturbed_instance_reshaped,
-            verbose=0,
-        )[0][self.reference_labels[nun_index]]
+        prob_target = model.predict(perturbed_instance_reshaped)[0][self.reference_labels[nun_index]]
 
         while prob_target <= theta:
             subarray_length += 1
@@ -330,9 +333,9 @@ class CONFETTI:
                 1, perturbed_instance.shape[0], perturbed_instance.shape[1]
             )
 
-            prob_target = model.predict(perturbed_instance_reshaped, verbose=0)[0][self.reference_labels[nun_index]]
+            prob_target = model.predict(perturbed_instance_reshaped)[0][self.reference_labels[nun_index]]
 
-        ce_label = np.argmax(model.predict(perturbed_instance_reshaped,verbose=0,),axis=1,)
+        ce_label = np.argmax(model.predict(perturbed_instance_reshaped),axis=1,)
 
         if verbose:
             print(f"Naive stage finished for instance {instance_index}")
@@ -359,11 +362,11 @@ class CONFETTI:
         mutation_probability: float = 0.9,
         optimize_confidence: bool = True,
         optimize_sparsity: bool = True,
-        optimize_proximity: bool = False,
+        optimize_proximity: bool = True,
         proximity_distance: str = "euclidean",
         dtw_window: Optional[int] = None,
         verbose: bool = False,
-    ) -> CounterfactualSet:
+    ) -> None | CounterfactualSet:
         """
         Perform counterfactual optimization for a single instance.
 
@@ -513,7 +516,7 @@ class CONFETTI:
                     perturbations[:, starting_point:end_point, :],
                 )
 
-                predictions = model.predict(perturbations, verbose=False)
+                predictions = model.predict(perturbations)
                 predicted_labels = np.argmax(predictions, axis=1)
 
 
@@ -531,21 +534,24 @@ class CONFETTI:
         if verbose:
             print(f"Optimization of CE for Instance {instance_index} finished.")
 
-        objectives_array: np.ndarray = np.vstack(objective_values)
-        if optimize_confidence and optimize_sparsity:
-            best = self._select_best_solution(all_counterfactuals, objectives_array, alpha)
+        if not objective_values:
+            return None
         else:
-            best = None
+            objectives_array: np.ndarray = np.vstack(objective_values)
+            if optimize_confidence and optimize_sparsity:
+                best = self._select_best_solution(all_counterfactuals, objectives_array, alpha)
+            else:
+                best = None
 
-        counterfactuals = CounterfactualSet(
-            original_instance=query,
-            original_label = self.original_labels[instance_index].item(),
-            nearest_unlike_neighbour=nun,
-            best_solution = best,
-            all_counterfactuals=all_counterfactuals,
-        )
+            counterfactuals = CounterfactualSet(
+                original_instance=query,
+                original_label = self.original_labels[instance_index].item(),
+                nearest_unlike_neighbour=nun,
+                best_solution = best,
+                all_counterfactuals=all_counterfactuals,
+            )
 
-        return counterfactuals
+            return counterfactuals
 
     def _one_pass(
         self,
@@ -559,7 +565,7 @@ class CONFETTI:
         mutation_probability: float = 0.9,
         optimize_confidence: bool = True,
         optimize_sparsity: bool = True,
-        optimize_proximity: bool = False,
+        optimize_proximity: bool = True,
         proximity_distance: str = "euclidean",
         dtw_window: Optional[int] = None,
         verbose: bool = False,
@@ -615,8 +621,11 @@ class CONFETTI:
         """
 
         # Load model
-        model = keras.models.load_model(self.model_path)
-        # Find the Nearest Unlike Neighbour
+        if self.model_path.endswith(".joblib"):
+            model = joblib.load(self.model_path)
+        else:
+            model = keras.models.load_model(self.model_path)
+
         nun_index = self._nearest_unlike_neighbour(
             query=self.instances_to_explain[test_instance],
             predicted_label=self.original_labels[test_instance].item(),
@@ -638,6 +647,7 @@ class CONFETTI:
             if verbose:
                 print("No feature weights were found. Skipping naive stage.")
                 print(f"Optimization stage started for instance {test_instance}")
+            start_time_optimization = time.time()
             counterfactual_set: None | CounterfactualSet = self._optimization(
                 instance_index=test_instance,
                 nun_index=nun_index,
@@ -657,7 +667,6 @@ class CONFETTI:
                 dtw_window=dtw_window,
                 verbose=verbose,
             )
-
             return counterfactual_set
         else:
             naive, subarray_length = self._naive_stage(
@@ -717,7 +726,7 @@ class CONFETTI:
         mutation_probability: float = 0.9,
         optimize_confidence: bool = True,
         optimize_sparsity: bool = True,
-        optimize_proximity: bool = False,
+        optimize_proximity: bool = True,
         proximity_distance: str = "euclidean",
         dtw_window: Optional[int] = None,
         processes: Optional[int] = None,
@@ -789,9 +798,9 @@ class CONFETTI:
             self._validate_types(locals())
 
         self._instances_to_explain : np.ndarray = instances_to_explain
-        self._original_labels : np.ndarray = np.argmax(self.model.predict(self.instances_to_explain, verbose=0), axis=1)
+        self._original_labels : np.ndarray = np.argmax(self.model.predict(self.instances_to_explain), axis=1)
         self.reference_data : np.ndarray = reference_data
-        self.reference_labels : np.ndarray = np.argmax(self.model.predict(self.reference_data, verbose=0), axis=1)
+        self.reference_labels : np.ndarray = np.argmax(self.model.predict(self.reference_data), axis=1)
         self.weights = reference_weights
 
         results : None | CounterfactualResults = None
@@ -858,7 +867,7 @@ class CONFETTI:
         mutation_probability: float = 0.9,
         optimize_confidence: bool = True,
         optimize_sparsity: bool = True,
-        optimize_proximity: bool = False,
+        optimize_proximity: bool = True,
         proximity_distance: str = "euclidean",
         dtw_window: Optional[int] = None,
         processes: int = 8,
@@ -962,7 +971,7 @@ class CONFETTI:
         mutation_probability: float = 0.9,
         optimize_confidence: bool = True,
         optimize_sparsity: bool = True,
-        optimize_proximity: bool = False,
+        optimize_proximity: bool = True,
         proximity_distance: str = "euclidean",
         dtw_window: Optional[int] = None,
         verbose: bool = False,
@@ -1108,7 +1117,7 @@ class CONFETTI:
 
         if counterfactual_sets:
             return CounterfactualResults(
-                counterfactual_sets=self.counterfactual_sets)
+                counterfactual_sets=counterfactual_sets)
         else:
             return None
 

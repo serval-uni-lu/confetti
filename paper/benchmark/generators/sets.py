@@ -3,6 +3,7 @@ import keras
 import pandas as pd
 import time
 from tqdm import tqdm
+import joblib
 from TSInterpret.InterpretabilityModels.counterfactual.SETSCF import SETSCF
 from src.confetti.utils import (
     load_data,
@@ -15,7 +16,7 @@ keras.utils.disable_interactive_logging()
 
 
 def run_sets_counterfactuals(model_name=None):
-    datasets = ["NATOPS"]
+    datasets = cfg.DATASETS
     times_file = cfg.RESULTS_DIR / f"execution_time_sets_{model_name}.csv"
     results_directory = cfg.RESULTS_DIR
     results_directory.mkdir(parents=True, exist_ok=True)
@@ -28,8 +29,12 @@ def run_sets_counterfactuals(model_name=None):
 
     for dataset in tqdm(datasets, desc="Processing datasets"):
         # load the model
-        model_path = cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras"
-        model = keras.models.load_model(model_path)
+        if model_name == "logistic":
+            model_path = cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_logistic.joblib"
+            model = joblib.load(model_path)
+        else:
+            model_path = cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras"
+            model = keras.models.load_model(model_path)
 
         # Sets needs one-hot encoding to be False because it does the One-Hot encoding internally
         X_train, X_test, y_train, y_test = load_data(dataset, one_hot=False)
@@ -39,8 +44,8 @@ def run_sets_counterfactuals(model_name=None):
         X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
         print(f"Loaded {dataset} samples from CSV: {X_samples.shape}")
 
-        # Determine time series length (assuming shape is [n_samples, n_channels, series_length])
-        series_length = X_train.shape[2]
+        # Determine time series length (assuming shape is [n_samples, timesteps, channels])
+        series_length = X_train.shape[1]
         min_shapelet_len = max(3, series_length // 10)
         max_shapelet_len = max(min_shapelet_len + 1, series_length // 2)
 
@@ -114,7 +119,7 @@ def run_sets_counterfactuals(model_name=None):
 
 
 def main():
-    run_sets_counterfactuals(model_name="resnet")
+    run_sets_counterfactuals(model_name="logistic")
 
 
 if __name__ == "__main__":

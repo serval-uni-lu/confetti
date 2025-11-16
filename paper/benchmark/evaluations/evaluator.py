@@ -11,7 +11,7 @@ from src.confetti.utils import (
 import keras
 from paper import config as cfg
 from pathlib import Path
-
+import joblib
 keras.utils.disable_interactive_logging()
 
 
@@ -85,7 +85,8 @@ class Evaluator:
             lambda x: convert_string_to_array(x, timesteps=timesteps, channels=channels)
         )
 
-
+        if explainer in {"confetti", "Normal", "Ablation"}:
+            counterfactuals = counterfactuals[counterfactuals["is_best"] == True]
 
         # Get the labels of the original instance *when evaluated by the model*
         og_labels = np.argmax(model.predict(X_sample), axis=1)
@@ -170,6 +171,7 @@ class Evaluator:
         )
 
         return counterfactuals_metrics, dataset_summary
+
 
     @staticmethod
     def __load_samples(dataset: str):
@@ -304,6 +306,8 @@ class Evaluator:
         ----------
         explainer : str
             The name of the explainer.
+        model_name (str):
+            The name of the model that was used. Either 'fcn', 'resnet' or "logistic".
         dataset (str): The dataset name.
         sample (numpy.ndarray): The sample set containing the original instances.
         counterfactuals (pd.DataFrame): The counterfactuals to evaluate.
@@ -317,7 +321,7 @@ class Evaluator:
             DataFrame: A DataFrame summarizing the evaluation results.
         """
         coverage = self.__get_coverage(sample=sample, counterfactuals=counterfactuals)
-        if explainer not in ["confetti", "ablation_study"]:
+        if explainer not in ["confetti"]:
             summary = {
                 "Explainer": explainer,
                 "Dataset": dataset,
@@ -360,9 +364,14 @@ class Evaluator:
         Returns:
             keras.Model: The trained Keras model.
         """
-        return keras.models.load_model(
-            str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model}.keras")
-        )
+        if model == "logistic":
+            return joblib.load(
+                cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_logistic.joblib"
+            )
+        else:
+            return keras.models.load_model(
+                str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model}.keras")
+            )
 
     @staticmethod
     def __get_counterfactuals(
@@ -379,9 +388,7 @@ class Evaluator:
         """
         dirpath = cfg.RESULTS_DIR / dataset
 
-        if explainer in {"confetti", "ablation_study"}:
-            base = "confetti" if explainer == "ablation_study" else explainer
-            suffix = "_ablation_study" if explainer == "ablation_study" else ""
+        if explainer in ["confetti"]:
             param_name = "alpha" if alpha else "theta"
 
             # Build several safe representations of the float
@@ -393,14 +400,14 @@ class Evaluator:
 
             # Try candidates in order and load the first that exists
             for ps in dict.fromkeys(candid_strs):  # deduplicate while preserving order
-                fname = f"{base}_{dataset}_{model}_{param_name}_{ps}{suffix}.csv"
+                fname = f"confetti_{dataset}_{model}_{param_name}_{ps}.csv"
                 fpath = dirpath / fname
                 if fpath.exists():
                     return pd.read_csv(fpath)
 
             # Nothing matched
             tried = [
-                str(dirpath / f"{base}_{dataset}_{model}_{param_name}_{ps}{suffix}.csv")
+                str(dirpath / f"confetti_{dataset}_{model}_{param_name}_{ps}.csv")
                 for ps in dict.fromkeys(candid_strs)
             ]
             raise FileNotFoundError(f"Could not find any of: {tried}")

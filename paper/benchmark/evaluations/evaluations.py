@@ -11,8 +11,8 @@ DATASETS = [
     "NATOPS",
     "RacketSports",
 ]
-CONFETTI_ALPHA = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
-CONFETTI_THETA = [0.55, 0.65, 0.75, 0.85, 0.95]
+CONFETTI_ALPHA = [0.0, 0.3, 0.5, 0.7, 1.0]
+CONFETTI_THETA = [0.55, 0.75, 0.95]
 EXPLAINERS = [
     ("comte", "Comte"),
     ("sets", "Sets"),
@@ -46,50 +46,24 @@ def evaluate_results_parallel():
                 configs.append((explainer, dataset, model, display_name, {}))
 
     # Confetti standard runs
-    for confetti in ["confetti_naive", "confetti_optimized"]:
-        for dataset in DATASETS:
-            for model in MODELS:
-                for alpha in CONFETTI_ALPHA:
-                    extra_kwargs = {"alpha": True, "param_config": alpha}
-                    display_name = (
-                        f"{confetti.replace('_', ' ').title()} (alpha={alpha})"
-                    )
-                    configs.append(
-                        (confetti, dataset, model, display_name, extra_kwargs)
-                    )
-                for theta in CONFETTI_THETA:
-                    extra_kwargs = {"alpha": False, "param_config": theta}
-                    display_name = (
-                        f"{confetti.replace('_', ' ').title()} (theta={theta})"
-                    )
-                    configs.append(
-                        (confetti, dataset, model, display_name, extra_kwargs)
-                    )
-
-    # Ablation Study as a separate explainer
+    confetti = "confetti"
     for dataset in DATASETS:
         for model in MODELS:
             for alpha in CONFETTI_ALPHA:
                 extra_kwargs = {"alpha": True, "param_config": alpha}
+                display_name = (
+                    f"{confetti.replace('_', ' ').title()} (alpha={alpha})"
+                )
                 configs.append(
-                    (
-                        "ablation_study",
-                        dataset,
-                        model,
-                        f"Ablation Study (alpha={alpha})",
-                        extra_kwargs,
-                    )
+                    (confetti, dataset, model, display_name, extra_kwargs)
                 )
             for theta in CONFETTI_THETA:
                 extra_kwargs = {"alpha": False, "param_config": theta}
+                display_name = (
+                    f"{confetti.replace('_', ' ').title()} (theta={theta})"
+                )
                 configs.append(
-                    (
-                        "ablation_study",
-                        dataset,
-                        model,
-                        f"Ablation Study (theta={theta})",
-                        extra_kwargs,
-                    )
+                    (confetti, dataset, model, display_name, extra_kwargs)
                 )
 
     summaries = []
