@@ -77,33 +77,6 @@ cd benchmark/evaluations
 python evaluations.py
 ```
 
-Then perform the statistical analysis (Wilcoxon tests):
 
-```bash
-python wilcoxon.py
-cd ../..
-```
 
----
 
-## 7. Generate figures
-
-Finally, regenerate all figures used in the paper:
-
-```bash
-cd figures
-python figures.py
-cd ..
-```
-
----
-
-## Notes
-
-- If you are running this on a machine with **only one CPU core**, edit the file `evaluations.py` (and similar scripts using `ProcessPoolExecutor`) to set `max_workers=1`. For example:
-
-  ```python
-  with ProcessPoolExecutor(max_workers=1) as executor:
-  ```
-
-- Make sure all commands are run from the root of the repository, unless stated otherwise.
