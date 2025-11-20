@@ -1,10 +1,11 @@
 import os
 from paper import config as cfg
-from src.confetti.utils import (
+from confetti.utils import (
     load_data,
-    get_samples,
     load_multivariate_ts_from_csv,
 )
+from paper.utils import get_samples
+
 
 if __name__ == "__main__":
     # Current directory

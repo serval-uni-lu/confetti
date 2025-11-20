@@ -4,9 +4,12 @@ from generators.confetti_generator import run_confetti_counterfactuals
 from generators.comte import run_comte_counterfactuals
 from generators.patch_tsinterpret import patch_comte
 from data.generate_samples import create_samples
+from paper.models import train_models
 
 
 def main():
+    # First, train the models
+    train_models()
     # Generate instances to explain
     create_samples("fcn")
     create_samples("resnet")

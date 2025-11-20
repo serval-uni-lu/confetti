@@ -3,7 +3,7 @@ from paper import config as cfg
 import pandas as pd
 
 def benchmark_significance_tests():
-    models = ["fcn", "resnet", "logistic"]
+    models = ["fcn", "resnet"]
     results_dir = cfg.EVALUATIONS_FILE
     benchmark_summary : pd.DataFrame = pd.read_csv(results_dir)
 

@@ -4,8 +4,9 @@ import joblib
 from confetti.utils import (
     load_data,
     save_multivariate_ts_as_csv,
-    get_predicted_samples,
 )
+from paper.utils import get_predicted_samples
+
 from paper import config as cfg
 import numpy as np
 from tqdm import tqdm
@@ -40,5 +41,5 @@ def create_samples(model_name: str):
 
 if __name__ == "__main__":
     create_samples("fcn")
-    #create_samples("resnet")
+    create_samples("resnet")
     #create_samples("logistic")

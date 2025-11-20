@@ -5,7 +5,6 @@ from confetti.utils import load_data, load_multivariate_ts_from_csv
 from confetti import CONFETTI
 from confetti.explainer.counterfactuals import Counterfactual, CounterfactualResults
 from paper import config as cfg
-from tqdm import tqdm
 import pandas as pd
 import numpy as np
 from paper.benchmark.generators.confetti_generator import create_standard_results_dataframe

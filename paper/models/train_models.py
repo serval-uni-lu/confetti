@@ -79,7 +79,7 @@ def train_model(model_name: str):
 
 
 
-def main():
+def train_models():
     # This script will train FCN and ResNet models for all datasets.
     train_model("fcn")
     train_model("resnet")
@@ -88,4 +88,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    train_models()

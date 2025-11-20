@@ -26,7 +26,7 @@ from multiprocessing import Pool
 from functools import partial
 
 class CONFETTI:
-    def __init__(self, model_path: Union[None,Path,str] = None):
+    def __init__(self, model_path: Union[Path,str] = None):
         """
         Initialize the CONFETTI explainer with the model and data.
         Args:
@@ -38,11 +38,11 @@ class CONFETTI:
                 f"but got {type(model_path).__name__} instead."
             )
         self._model_path = model_path
-        if model_path is not None:
-            if str(model_path).endswith(".joblib"):
-                self._model = joblib.load(str(model_path))
-            else:
-                self._model = keras.models.load_model(model_path)
+
+        if str(model_path).endswith(".joblib"):
+            self._model = joblib.load(str(model_path))
+        else:
+            self._model = keras.models.load_model(model_path)
 
         self._instances_to_explain: Optional[np.ndarray] = None
         self._original_labels: Optional[np.ndarray] = None
@@ -52,7 +52,7 @@ class CONFETTI:
         self.nuns: List[int] = []
 
     @property
-    def model_path(self) -> None | str:
+    def model_path(self) -> str:
         return self._model_path
 
     @property
@@ -647,7 +647,6 @@ class CONFETTI:
             if verbose:
                 print("No feature weights were found. Skipping naive stage.")
                 print(f"Optimization stage started for instance {test_instance}")
-            start_time_optimization = time.time()
             counterfactual_set: None | CounterfactualSet = self._optimization(
                 instance_index=test_instance,
                 nun_index=nun_index,

@@ -3,7 +3,6 @@ from typing import Optional
 import numpy as np
 import importlib
 from confetti.errors import CONFETTIConfigurationError
-import time
 
 
 class CounterfactualProblem(Problem):

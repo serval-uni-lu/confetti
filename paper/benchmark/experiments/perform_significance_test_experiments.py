@@ -1,7 +1,6 @@
 import numpy as np
 
 from paper.benchmark.evaluations.rankings import normalize_proximity_metrics, wilcoxon_holm, do_statistical_test
-from paper.benchmark.evaluations.evaluator import Evaluator
 from paper import config as cfg
 import pandas as pd
 

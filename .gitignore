@@ -12,6 +12,10 @@ __pycache__/
 
 #Results Files
 *.csv
+*.pdf
+*.xlsx
+*.aux
+*.tex
 
 # Distribution / packaging
 .Python
@@ -29,10 +33,12 @@ var/
 wheels/
 share/python-wheels/
 *.egg-info/
+src/*.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 *.xml
+*.joblib
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -178,3 +184,4 @@ cython_debug/
 .vscode/
 *.code-workspace
 
+uv.lock
