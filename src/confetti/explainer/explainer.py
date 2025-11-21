@@ -1,6 +1,6 @@
 from confetti.errors import CONFETTIConfigurationError, CONFETTIError, CONFETTIDataTypeError
-from confetti.explainer._problem import CounterfactualProblem
-from confetti.explainer.counterfactuals import Counterfactual, CounterfactualSet, CounterfactualResults
+from confetti.explainer._counterfactual_problem import CounterfactualProblem
+from confetti.explainer.counterfactual_structs import Counterfactual, CounterfactualSet, CounterfactualResults
 
 import time
 from typing import Optional, List, Tuple, Union
@@ -549,6 +549,7 @@ class CONFETTI:
                 nearest_unlike_neighbour=nun,
                 best_solution = best,
                 all_counterfactuals=all_counterfactuals,
+                feature_importance=self.weights[nun_index] if self.weights is not None else None
             )
 
             return counterfactuals
@@ -647,7 +648,6 @@ class CONFETTI:
             if verbose:
                 print("No feature weights were found. Skipping naive stage.")
                 print(f"Optimization stage started for instance {test_instance}")
-            start_time_optimization = time.time()
             counterfactual_set: None | CounterfactualSet = self._optimization(
                 instance_index=test_instance,
                 nun_index=nun_index,
@@ -709,6 +709,7 @@ class CONFETTI:
                     nearest_unlike_neighbour=self.reference_data[nun_index],
                     best_solution=naive,
                     all_counterfactuals=[naive],
+                    feature_importance=self.weights[nun_index]
                 )
                 return counterfactual_set
 

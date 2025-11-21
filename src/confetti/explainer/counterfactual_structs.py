@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 @dataclass
-class Counterfactual():
+class Counterfactual:
     """A class to store a single counterfactual explanation results.
 
     Parameters
@@ -32,7 +32,7 @@ class Counterfactual():
         )
 
 
-class CounterfactualSet():
+class CounterfactualSet:
     """A class to store all counterfactual explanation results for a single instance.
 
     Parameters
@@ -73,20 +73,23 @@ class CounterfactualSet():
                  original_instance: np.ndarray,
                  original_label: str | int | float | np.int64 | np.float64,
                  nearest_unlike_neighbour: np.ndarray,
-                 best_solution: None |Counterfactual,
-                 all_counterfactuals: List[Counterfactual]):
+                 best_solution: None | Counterfactual,
+                 all_counterfactuals: List[Counterfactual],
+                 feature_importance: Optional[np.ndarray] = None):
 
         self._validate_dtypes(original_instance,
                               original_label,
                               nearest_unlike_neighbour,
                               best_solution,
-                              all_counterfactuals)
+                              all_counterfactuals,
+                              feature_importance)
 
         self._original_instance: np.ndarray = original_instance
         self._original_label: str | int | float = original_label
         self._nearest_unlike_neighbour: np.ndarray = nearest_unlike_neighbour
         self._best: Counterfactual = best_solution
         self._all_counterfactuals: List[Counterfactual] = all_counterfactuals
+        self._feature_importance: Optional[np.ndarray] = feature_importance  # optional 1D weights
 
     @property
     def original_instance(self) -> np.ndarray:
@@ -107,6 +110,11 @@ class CounterfactualSet():
     @property
     def all_counterfactuals(self) -> List[Counterfactual]:
         return self._all_counterfactuals
+
+    @property
+    def feature_importance(self) -> Optional[np.ndarray]:
+        """Optional 1D array of feature weights for the nearest unlike neighbour."""
+        return self._feature_importance
 
     def to_dataframe(self) -> pd.DataFrame:
         """
@@ -132,6 +140,7 @@ class CounterfactualSet():
                 "original_instance": [self.original_instance] * len(self.all_counterfactuals),
                 "original_label": [self.original_label] * len(self.all_counterfactuals),
                 "nearest_unlike_neighbour": [self.nearest_unlike_neighbour] * len(self.all_counterfactuals),
+                "feature_importance": [self.feature_importance] * len(self.all_counterfactuals)
             }
 
             df = pd.DataFrame(data)
@@ -143,7 +152,7 @@ class CounterfactualSet():
 
         Parameters
         ----------
-        output_directory : str
+        output_path : str
             The file path where the CSV will be saved.
         """
 
@@ -158,6 +167,11 @@ class CounterfactualSet():
         df["counterfactual"] = df["counterfactual"].apply(array_to_string)
         df["original_instance"] = df["original_instance"].apply(array_to_string)
         df["nearest_unlike_neighbour"] = df["nearest_unlike_neighbour"].apply(array_to_string)
+        # stringify feature_importance if present
+        if "feature_importance" in df.columns and df["feature_importance"].notna().any():
+            df["feature_importance"] = df["feature_importance"].apply(
+                lambda x: array_to_string(x) if isinstance(x, np.ndarray) else None
+            )
         df.to_csv(output_path, index=False)
         print(f"Counterfactuals exported to {output_path}")
 
@@ -167,7 +181,8 @@ class CounterfactualSet():
             original_label: Union[str, int, float, np.int64, np.float64],
             nearest_unlike_neighbour: np.ndarray,
             best_solution: None | Counterfactual,
-            all_counterfactuals: List[Counterfactual]
+            all_counterfactuals: List[Counterfactual],
+            feature_importance: Optional[np.ndarray]
     ) -> None:
         """
         Validate the input types required for counterfactual processing.
@@ -207,8 +222,23 @@ class CounterfactualSet():
                 hint="Ensure that all entries are of type Counterfactual object."
             )
 
+        # new validation for optional feature_importance
+        if feature_importance is not None:
+            if not isinstance(feature_importance, np.ndarray):
+                raise CONFETTIDataTypeError(
+                    message="feature_importance must be a numpy array or None.",
+                    param="feature_importance",
+                    hint="Pass a 1D numpy array of feature weights or leave as None."
+                )
+            if feature_importance.ndim != 1:
+                raise CONFETTIDataTypeError(
+                    message="feature_importance must be a 1D numpy array.",
+                    param="feature_importance",
+                    hint="Reshape or select the appropriate 1D vector of feature weights."
+                )
 
-class CounterfactualResults():
+
+class CounterfactualResults:
     """A class to store counterfactual explanation results for multiple instances.
 
     Parameters
@@ -270,7 +300,7 @@ class CounterfactualResults():
         else:
             return pd.concat([ces.to_dataframe() for ces in self.counterfactual_sets], ignore_index=True)
 
-    def to_csv(self, output_path: Path | str = Path("./counterfactuals.csv") ) -> None:
+    def to_csv(self, output_path: Path | str = Path("./counterfactuals.csv")) -> None:
         """
         Export all counterfactuals for all instances to a CSV file.
 
@@ -293,3 +323,4 @@ class CounterfactualResults():
         df["nearest_unlike_neighbour"] = df["nearest_unlike_neighbour"].apply(array_to_string)
         df.to_csv(output_path, index=False)
         print(f"All counterfactuals exported to {output_path}")
+

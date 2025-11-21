@@ -1,6 +1,6 @@
-from .explainer.confetti_explainer import CONFETTI
+from .explainer.explainer import CONFETTI
 from .errors import CONFETTIConfigurationError, CONFETTIError, CONFETTIDataTypeError
-from .explainer.counterfactuals import Counterfactual, CounterfactualSet, CounterfactualResults
+from .explainer.counterfactual_structs import Counterfactual, CounterfactualSet, CounterfactualResults
 
 
 __all__ = ["CONFETTI",

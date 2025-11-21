@@ -1,21 +1,8 @@
-from .visualizer import (
-plot_counterfactual_comparison,
-plot_mean_sparsity_confidence,
-visualize_time_series,
-visualize_counterfactuals,
-plot_with_cam_as_line,
-plot_with_cam_as_heatmap,
-plot_method_comparison_with_cam_horizontal,
-tradeoff_sparsity_proximity
-)
+from .visualizer import plot_time_series, plot_counterfactual
+
 
 __all__ = [
-    "visualize_time_series",
-    "visualize_counterfactuals",
-    "plot_counterfactual_comparison",
-    "plot_mean_sparsity_confidence",
-    "plot_with_cam_as_line",
-    "plot_with_cam_as_heatmap",
-    "plot_method_comparison_with_cam_horizontal",
-    "tradeoff_sparsity_proximity",
+    "plot_time_series",
+    "plot_counterfactual",
 ]
+

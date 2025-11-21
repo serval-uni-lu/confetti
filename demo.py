@@ -1,102 +1,91 @@
-from paper import config as cfg
+from pathlib import Path
 import keras
-import paper.CAM.class_activation_map as cam
-from confetti import CONFETTI, CounterfactualResults
-from confetti.utils import  load_data, load_multivariate_ts_from_csv, array_to_string
-import numpy as np
-import pandas as pd
-from paper.benchmark.evaluations.evaluator import Evaluator
-import joblib
+
+from confetti import CONFETTI
+from confetti.explainer import CounterfactualResults
+from confetti.utils import load_multivariate_ts_from_csv
+from confetti.attribution import cam
+from confetti.visualizations import plot_time_series, plot_counterfactual
+
 keras.utils.disable_interactive_logging()
 
+ROOT = Path("examples")
 
-def create_standard_results_dataframe(
-    counterfactuals: CounterfactualResults,
-    test_instances: np.ndarray,
-    nun_instances: np.ndarray
-) -> pd.DataFrame:
-    """Create the standard DataFrame used by the Evaluator from CounterfactualResults."""
-    df = counterfactuals.to_dataframe()
+DATA_SCRIPT = ROOT / "scripts" / "generate_toy_dataset.py"
+TRAIN_SCRIPT = ROOT / "scripts" / "train_toy_model.py"
 
-    df["Test Instance"] = [
-        next((i for i, instance in enumerate(test_instances) if np.array_equal(original, instance)), None)
-        for original in df["original_instance"]
-    ]
+DATA_TRAIN_PATH = ROOT / "data" / "toy_train.csv"
+DATA_TEST_PATH = ROOT / "data" / "toy_test.csv"
+MODEL_PATH = ROOT / "models" / "toy_fcn.keras"
 
-    df["NUN Instance"] = [
-        next((i for i, instance in enumerate(nun_instances) if np.array_equal(nun, instance)), None)
-        for nun in df["nearest_unlike_neighbour"]
-    ]
+print("Scripts located:")
+print(DATA_SCRIPT)
+print(TRAIN_SCRIPT)
 
-    df = df.rename(columns={"label": "CE Label", "counterfactual": "Solution"})
-    return df[["Solution", "Test Instance", "NUN Instance", "CE Label"]].reset_index(drop=True)
+def demo():
+    model = keras.models.load_model(MODEL_PATH)
+    print("Model loaded:", MODEL_PATH)
+    X_train, y_train = load_multivariate_ts_from_csv(str(DATA_TRAIN_PATH))
+    X_test, y_test = load_multivariate_ts_from_csv(str(DATA_TEST_PATH))
 
-
-def run_demo(
-    model_name: str = "fcn",
-    proximity_distance: str = "euclidean",
-    dtw_window: int = None,
-    dataset: str = "Libras",
-):
-    # Load samples and model
-    sample_file = f"{cfg.DATA_DIR}/{dataset}_{model_name}_samples.csv"
-
-    model_path = str(cfg.TRAINED_MODELS_DIR / dataset / f"{dataset}_{model_name}.keras")
-    model = keras.models.load_model(model_path)
-
-    X_samples, y_samples = load_multivariate_ts_from_csv(sample_file)
-    X_samples = X_samples[0:5]
+    print("Dataset loaded.")
+    print("Shape:", X_train.shape, y_train.shape)
+    print("Example sample shape:", X_train[0].shape)
 
 
-    # Load reference data
-    X_train, _, y_train, _ = load_data(dataset, one_hot=False)
+    training_weights = cam(model, X_train)
 
-    # Compute CAM weights for reference data
-    training_weights = cam.compute_weights_cam(
-        model=model,
-        X_data=X_train,
-        dataset=dataset,
-        save_weights=False,
-        data_type="training",
-    )
+    instance_to_explain = X_test[0:1]
+    plot_time_series(instance_to_explain[0], title="Instance to Explain")
 
+    explainer = CONFETTI(model_path=MODEL_PATH)
 
-    explainer = CONFETTI(model_path=model_path)
-
-    counterfactuals: CounterfactualResults = explainer.generate_counterfactuals(
-        instances_to_explain=X_samples,
+    ce_results : CounterfactualResults = explainer.generate_counterfactuals(
+        instances_to_explain=instance_to_explain,
         reference_data=X_train,
         reference_weights=training_weights,
-        alpha=0.5,
-        theta=0.51,
-        proximity_distance=proximity_distance,
-        dtw_window=dtw_window,
-        verbose=True,
-        processes=4,
-        save_counterfactuals=False,
+        verbose=True
     )
+    print("Counterfactual generation complete.")
+    for sets in ce_results.counterfactual_sets:
+        print("Original instance shape:", sets.original_instance.shape)
+        print("Original Label:", sets.original_label)
+        print("Best Counterfactual", sets.best.counterfactual.shape)
+        print("Best Counterfactual Label:", sets.best.label)
+        print("Nearest Unlike Neighbour shape:", sets.nearest_unlike_neighbour.shape)
+        print("Training Weights used:", sets.feature_importance)
 
-    results_df = create_standard_results_dataframe(
-        counterfactuals=counterfactuals,
-        test_instances=X_samples,
-        nun_instances=X_train,
-    )
+        plot_time_series(series=sets.nearest_unlike_neighbour, title="Nearest Unlike Neighbour")
+
+        plot_counterfactual(
+                original = sets.original_instance,
+                counterfactual = sets.best,
+                title = "Normal Counterfactual Plot",)
+
+        plot_counterfactual(
+                original = sets.original_instance,
+                counterfactual = sets.best,
+                channels = [0],
+                title = "Selecting One Channel",)
 
 
-    ev = Evaluator()
-    metrics, summary = ev.evaluate_from_csv(explainer="Confetti",
-                                            dataset=dataset,
-                                            model_name="fcn",
-                                            optional_path="temp.csv")
-    print(f"Summary:\n{summary}")
+        plot_counterfactual(
+            original=sets.original_instance,
+            counterfactual=sets.best,
+            cam_weights=sets.feature_importance,
+            cam_mode="line",
+            title="Counterfactual with CAM as line", )
 
-    results_df["Solution"] = results_df["Solution"].apply(array_to_string)
-    results_df.to_csv("temp.csv", index=False)
-
+        plot_counterfactual(
+            original=sets.original_instance,
+            counterfactual=sets.best,
+            cam_weights=sets.feature_importance,
+            cam_mode="heatmap",
+            title="Counterfactual with CAM as heatmap", )
 
 def main():
-    run_demo(model_name="fcn")
-
+    demo()
 
 if __name__ == "__main__":
     main()
+

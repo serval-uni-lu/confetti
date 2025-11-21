@@ -1,81 +1,117 @@
-# Counterfactual Explainable AI (XAI) Method for Deep Learning-Based Multivariate Time Series Classification
-
-This repository contains the code to reproduce experiments, evaluations, and figures for our method. Follow the instructions below to replicate the results.
+# CONFETTI: Counterfactual Explanations for Multivariate Time Series
 
 ---
 
-## 1. Install requirements
 
-Make sure you are using **Python 3.12+** (preferably in a virtual environment). Then install dependencies:
+**CONFETTI** is a multi-objective method for generating **counterfactual explanations for multivariate time series**. 
+It identifies the most influential subsequences, constructs a minimal perturbation, and optimizes it under multiple objectives to produce **sparse**, **realistic**, and **confidence-increasing** counterfactuals 
 
+CONFETTI is model-agnostic and works with **any deep learning classifier**, differentiable or not.
+
+--- 
+## ✨ Highlights
+
+* Multi-objective optimization using NSGA-III
+* Works for any **Keras/Scikit-learn** multivariate time series classifier
+* Optional use of **class activation maps** for feature-weighted perturbations
+* Generates multiple diverse counterfactuals per instance
+* Parallelized counterfactual generation
+* Built-in utilities for:
+  * loading datasets
+  * computing CAM weights
+  * visualizing counterfactual explanations
+
+---
+## 🚀 Installation
+
+### Development Installation
 ```bash
-pip install -r requirements.txt
+uv venv
+source .venv/bin/activate
+uv pip install -e .
 ```
+
+### PyPI (once released)
+```bash
+pip install confetti-ts
+```
+Requirements:
+
+* Python 3.12+
+* NumPy, pandas
+* Keras 3.x
+* Pymoo
+* tslearn
+
+All dependencies are handled automatically via ``pyproject.toml``.
 
 ---
 
-## 2. Train the models
+## ⚡ Quick Example
+Below is a minimal end-to-end example based on the ``demo_confetti.ipynb`` notebook.
+It loads a trained model, prepares a dataset, and generates counterfactuals for a single instance.
 
-To train the baseline models used in the paper, run:
+```python
+from confetti import CONFETTI
+from confetti.attribution import cam
+from confetti.utils import load_multivariate_ts_from_csv
+from confetti.visualizations import plot_counterfactual
+import keras
 
-```bash
-cd models
-python train_models.py
-cd ..
+# Load model
+model_path = "examples/models/toy_fcn.keras"
+model = keras.models.load_model(model_path)
+
+# Load dataset in (n_samples, time_steps, n_features) format
+X_train, y_train = load_multivariate_ts_from_csv("examples/data/toy_train.csv")
+X_test, y_test   = load_multivariate_ts_from_csv("examples/data/toy_test.csv")
+
+# Select instance to explain
+instance = X_test[0:1]
+
+# Generate CAM weights for training data (optional)
+training_weights = cam(model, X_train)
+
+# Initialize explainer
+explainer = CONFETTI(model_path=model_path)
+
+# Generate counterfactuals
+results = explainer.generate_counterfactuals(
+    instances_to_explain=instance,
+    reference_data=X_train,
+    reference_weights=training_weights,      # or None if not available
+)
+
+# Visualize the best counterfactual
+plot_counterfactual(
+    original=results[0].original_instance,
+    counterfactual=results[0].best,
+    cam_weights=results[0].feature_importance,
+    cam_mode="heatmap",
+    title="Counterfactual Explanation"
+)
 ```
+<p> <img src="docs/artwork/counterfactual_example.png" alt="Counterfactual Example" width="650"/> </p>
 
-This will train models for all datasets.
+In the visualization:
+
+* green curves represent the original instance
+* red curves represent the counterfactual subsequence
+* the heatmap corresponds to CAM scores of the nearest unlike neighbor
+
+The alignment between CAM activation and the altered subsequence shows how CONFETTI uses attribution to target meaningful areas of the time series.
 
 ---
-
-## 3. Generate test samples
-
-Next, generate test samples:
-
-```bash
-cd benchmark/data
-python generate_samples.py
-cd ../..
-```
+## 📚Documentation
+Documentation is currently in preparation and will be available soon.
 
 ---
-
-## 4. Patch TSInterpret
-
-A patched version of TSInterpret is required. Run:
-
-```bash
-cd benchmark/generators
-python patch_tsinterpret.py
-cd ../..
-```
-
-This script automatically applies the required modifications.
+## 📄License
+To be added before release.
 
 ---
-
-## 5. Generate counterfactuals
-
-Run the benchmark script:
-
-```bash
-cd benchmark
-python reproduce_benchmark.py
-cd ..
-```
-
-This will generate counterfactual explanations for all configured methods.
-
----
-
-## 6. Evaluate results
-
-First, compute the evaluation metrics:
-
-```bash
-cd benchmark/evaluations
-python evaluations.py
-```
+## 📝 Citing CONFETTI
+A formal citation entry will appear here once the paper is officially released.
 
 
 

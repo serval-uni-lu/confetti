@@ -1,3 +1,3 @@
-from confetti.explainer.confetti_explainer import CONFETTI
+from confetti.explainer.explainer import CONFETTI
 
 __all__ = ["CONFETTI"]
