@@ -47,10 +47,7 @@ def convert_string_to_array(data_string: str, timesteps: int, channels: int) -> 
     expected_size = timesteps * channels
     if values.size != expected_size:
         raise CONFETTIConfigurationError(
-            message=(
-                f"Data does not match expected size ({timesteps}, {channels}). "
-                f"Found {values.size} elements."
-            ),
+            message=(f"Data does not match expected size ({timesteps}, {channels}). Found {values.size} elements."),
             config={"data_string": data_string},
             param="data_string",
             hint="Ensure the flattened string contains the correct number of whitespace-separated values.",
@@ -101,9 +98,7 @@ def save_multivariate_ts_as_csv(file_path: str | Path, x: np.ndarray, y: np.ndar
     label_df.to_csv(file_path.with_name(file_path.stem + "_labels.csv"), index=False)
 
 
-def load_multivariate_ts_from_csv(
-        file_path: str | Path
-) -> Tuple[np.ndarray, np.ndarray]:
+def load_multivariate_ts_from_csv(file_path: str | Path) -> Tuple[np.ndarray, np.ndarray]:
     """Load a multivariate time-series dataset saved with ``save_multivariate_ts_as_csv``.
 
     This function reconstructs the original ``X`` array by reshaping the

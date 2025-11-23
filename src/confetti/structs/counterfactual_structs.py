@@ -16,6 +16,7 @@ class Counterfactual:
         This class is a lightweight structure used internally by
         :class:`~confetti.explainer.counterfactual_structs.CounterfactualSet`.
     """
+
     counterfactual: np.ndarray
     """The generated counterfactual time series."""
 
@@ -26,10 +27,8 @@ class Counterfactual:
         if not isinstance(other, Counterfactual):
             return NotImplemented
 
-        return (
-                self.label == other.label and
-                np.array_equal(self.counterfactual, other.counterfactual)
-        )
+        return self.label == other.label and np.array_equal(self.counterfactual, other.counterfactual)
+
 
 class CounterfactualSet:
     """Container for all counterfactual explanations generated for one instance.
@@ -58,20 +57,23 @@ class CounterfactualSet:
         It provides convenience methods for exporting structured results.
     """
 
-    def __init__(self,
-                 original_instance: np.ndarray,
-                 original_label: str | int | float | np.int64 | np.float64,
-                 nearest_unlike_neighbour: np.ndarray,
-                 best_solution: None | Counterfactual,
-                 all_counterfactuals: List[Counterfactual],
-                 feature_importance: Optional[np.ndarray] = None):
-
-        self._validate_dtypes(original_instance,
-                              original_label,
-                              nearest_unlike_neighbour,
-                              best_solution,
-                              all_counterfactuals,
-                              feature_importance)
+    def __init__(
+        self,
+        original_instance: np.ndarray,
+        original_label: str | int | float | np.int64 | np.float64,
+        nearest_unlike_neighbour: np.ndarray,
+        best_solution: None | Counterfactual,
+        all_counterfactuals: List[Counterfactual],
+        feature_importance: Optional[np.ndarray] = None,
+    ):
+        self._validate_dtypes(
+            original_instance,
+            original_label,
+            nearest_unlike_neighbour,
+            best_solution,
+            all_counterfactuals,
+            feature_importance,
+        )
 
         self._original_instance: np.ndarray = original_instance
         self._original_label: str | int | float = original_label
@@ -160,7 +162,7 @@ class CounterfactualSet:
             raise CONFETTIError(
                 message="No counterfactuals available to export.",
                 param="all_counterfactuals",
-                hint="Generate counterfactuals before exporting to DataFrame."
+                hint="Generate counterfactuals before exporting to DataFrame.",
             )
         else:
             data = {
@@ -170,7 +172,7 @@ class CounterfactualSet:
                 "original_instance": [self.original_instance] * len(self.all_counterfactuals),
                 "original_label": [self.original_label] * len(self.all_counterfactuals),
                 "nearest_unlike_neighbour": [self.nearest_unlike_neighbour] * len(self.all_counterfactuals),
-                "feature_importance": [self.feature_importance] * len(self.all_counterfactuals)
+                "feature_importance": [self.feature_importance] * len(self.all_counterfactuals),
             }
 
             df = pd.DataFrame(data)
@@ -193,7 +195,7 @@ class CounterfactualSet:
             raise CONFETTIError(
                 message="Invalid output directory for CSV export.",
                 param="output_directory",
-                hint="Provide a valid string or Path for the output directory."
+                hint="Provide a valid string or Path for the output directory.",
             )
 
         df = self.to_dataframe()
@@ -210,12 +212,12 @@ class CounterfactualSet:
 
     @staticmethod
     def _validate_dtypes(
-            original_instance: np.ndarray,
-            original_label: Union[str, int, float, np.int64, np.float64],
-            nearest_unlike_neighbour: np.ndarray,
-            best_solution: None | Counterfactual,
-            all_counterfactuals: List[Counterfactual],
-            feature_importance: Optional[np.ndarray]
+        original_instance: np.ndarray,
+        original_label: Union[str, int, float, np.int64, np.float64],
+        nearest_unlike_neighbour: np.ndarray,
+        best_solution: None | Counterfactual,
+        all_counterfactuals: List[Counterfactual],
+        feature_importance: Optional[np.ndarray],
     ) -> None:
         """
         Validate the input types required for counterfactual processing.
@@ -228,8 +230,12 @@ class CounterfactualSet:
 
         validations = [
             ("original_instance", original_instance, np.ndarray, "numpy array"),
-            ("original_label", original_label, (str, int, float, np.int64, np.float64),
-             "string, integer, float, np.int64, or np.float64"),
+            (
+                "original_label",
+                original_label,
+                (str, int, float, np.int64, np.float64),
+                "string, integer, float, np.int64, or np.float64",
+            ),
             ("nearest_unlike_neighbour", nearest_unlike_neighbour, np.ndarray, "numpy array"),
         ]
 
@@ -238,21 +244,21 @@ class CounterfactualSet:
                 raise CONFETTIDataTypeError(
                     message=f"{param} must be a {expected_str}.",
                     param=param,
-                    hint=f"Ensure that {param} is of type {expected_str}."
+                    hint=f"Ensure that {param} is of type {expected_str}.",
                 )
 
         if best_solution is not None and not isinstance(best_solution, Counterfactual):
             raise CONFETTIDataTypeError(
                 message="best_solution must be a Counterfactual object or None.",
                 param="best_solution",
-                hint="Ensure that best_solution is either None or of type Counterfactual."
+                hint="Ensure that best_solution is either None or of type Counterfactual.",
             )
 
         if not all(isinstance(cf, Counterfactual) for cf in all_counterfactuals):
             raise CONFETTIDataTypeError(
                 message="All entries in all_counterfactuals must be Counterfactual objects.",
                 param="all_counterfactuals",
-                hint="Ensure that all entries are of type Counterfactual object."
+                hint="Ensure that all entries are of type Counterfactual object.",
             )
 
         # new validation for optional feature_importance
@@ -261,13 +267,13 @@ class CounterfactualSet:
                 raise CONFETTIDataTypeError(
                     message="feature_importance must be a numpy array or None.",
                     param="feature_importance",
-                    hint="Pass a 1D numpy array of feature weights or leave as None."
+                    hint="Pass a 1D numpy array of feature weights or leave as None.",
                 )
             if feature_importance.ndim != 1:
                 raise CONFETTIDataTypeError(
                     message="feature_importance must be a 1D numpy array.",
                     param="feature_importance",
-                    hint="Reshape or select the appropriate 1D vector of feature weights."
+                    hint="Reshape or select the appropriate 1D vector of feature weights.",
                 )
 
 
@@ -289,7 +295,6 @@ class CounterfactualResults:
     """
 
     def __init__(self, counterfactual_sets: Optional[List[CounterfactualSet]] = None):
-
         self._counterfactual_sets: None | List[CounterfactualSet] = counterfactual_sets
 
     @property
@@ -313,7 +318,7 @@ class CounterfactualResults:
             raise CONFETTIError(
                 message="No counterfactual sets available for indexing.",
                 param="counterfactual_sets",
-                hint="Generate counterfactual sets before attempting to access them."
+                hint="Generate counterfactual sets before attempting to access them.",
             )
         return self._counterfactual_sets[index]
 
@@ -330,7 +335,7 @@ class CounterfactualResults:
             raise CONFETTIError(
                 message="No counterfactual sets available to export.",
                 param="counterfactual_sets",
-                hint="Generate counterfactual sets before exporting to DataFrame."
+                hint="Generate counterfactual sets before exporting to DataFrame.",
             )
         else:
             return pd.concat([ces.to_dataframe() for ces in self.counterfactual_sets], ignore_index=True)
@@ -351,9 +356,8 @@ class CounterfactualResults:
             raise CONFETTIError(
                 message="Invalid output directory for CSV export.",
                 param="output_directory",
-                hint="Provide a valid string or Path for the output directory."
+                hint="Provide a valid string or Path for the output directory.",
             )
-
 
         df = self.to_dataframe()
         df["counterfactual"] = df["counterfactual"].apply(array_to_string)
@@ -361,4 +365,3 @@ class CounterfactualResults:
         df["nearest_unlike_neighbour"] = df["nearest_unlike_neighbour"].apply(array_to_string)
         df.to_csv(output_path, index=False)
         print(f"All counterfactuals exported to {output_path}")
-

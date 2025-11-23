@@ -3,9 +3,10 @@ import keras
 from keras.src.layers import Conv1D, Dense
 from confetti.errors import CONFETTIConfigurationError
 
+
 def cam(
     model,
-    X_data : np.ndarray,
+    X_data: np.ndarray,
 ):
     """Compute Class Activation Maps (CAMs) [1]_. for 1D convolutional classifiers.
 
@@ -54,16 +55,14 @@ def cam(
         In Proceedings of the IEEE conference on computer vision and pattern recognition (pp. 2921-2929).
     """
 
-
     conv_layers = [layer for layer in model.layers if isinstance(layer, Conv1D)]
     if not conv_layers:
         raise CONFETTIConfigurationError(
             message="No Conv1D layers found in model. CAM requires a Conv1D backbone.",
             param="model",
-            )
+        )
 
     last_conv_layer = conv_layers[-1]
-
 
     dense_layers = [layer for layer in model.layers if isinstance(layer, Dense)]
     if not dense_layers:
@@ -74,12 +73,10 @@ def cam(
     # Extract classifier weights: shape (n_filters, n_classes)
     w_k_c = classifier_layer.get_weights()[0]
 
-
     cam_model = keras.Model(
         inputs=model.input,
         outputs=[last_conv_layer.output, classifier_layer.output],
     )
-
 
     cam_results = []
 
@@ -91,7 +88,7 @@ def cam(
 
         conv_out, predictions = cam_model(series)
 
-        conv_out = conv_out.numpy()      # (1, timesteps, filters)
+        conv_out = conv_out.numpy()  # (1, timesteps, filters)
         predicted_class = np.argmax(predictions.numpy())
         filters = conv_out.shape[-1]
 

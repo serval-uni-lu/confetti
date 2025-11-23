@@ -101,10 +101,7 @@ def _select_channels(
         for idx in selected_idx:
             if idx < 0 or idx >= n_channels:
                 raise CONFETTIConfigurationError(
-                    message=(
-                        f"Channel index {idx} is out of bounds for a series with "
-                        f"{n_channels} channels."
-                    ),
+                    message=(f"Channel index {idx} is out of bounds for a series with {n_channels} channels."),
                     param="channels",
                     hint="Ensure channel indices are 0-based and strictly less than the number of channels.",
                 )
@@ -112,7 +109,6 @@ def _select_channels(
 
     selected_idx = list(range(n_channels))
     return series[:, selected_idx], selected_idx
-
 
 
 def plot_time_series(
@@ -266,10 +262,7 @@ def plot_counterfactual(
             )
         if cam_weights.shape[0] != timesteps:
             raise CONFETTIConfigurationError(
-                message=(
-                    f"cam_weights length {cam_weights.shape[0]} does not match "
-                    f"time dimension {timesteps}."
-                ),
+                message=(f"cam_weights length {cam_weights.shape[0]} does not match time dimension {timesteps}."),
                 param="cam_weights",
                 hint="Ensure CAM weights are computed for the same number of timesteps as the series.",
             )

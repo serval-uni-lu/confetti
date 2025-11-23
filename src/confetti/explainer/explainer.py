@@ -25,6 +25,7 @@ from pymoo.termination import get_termination
 from multiprocessing import Pool
 from functools import partial
 
+
 class CONFETTI:
     """
     CONFETTI explainer.
@@ -35,7 +36,8 @@ class CONFETTI:
     It supports confidence-based constraints, sparsity control, and optional
     proximity minimization.
     """
-    def __init__(self, model_path: Path | str ):
+
+    def __init__(self, model_path: Path | str):
         """
         Initialize a CONFETTI explainer.
 
@@ -46,7 +48,7 @@ class CONFETTI:
             are loaded with Keras; files ending in '.joblib' are loaded
             with joblib.
         """
-        if not isinstance(model_path, (str,Path)):
+        if not isinstance(model_path, (str, Path)):
             raise CONFETTIConfigurationError(
                 message="model_path must be a valid string or Path to the trained model.",
                 config={"received_type": type(model_path).__name__},
@@ -90,7 +92,7 @@ class CONFETTI:
             raise CONFETTIDataTypeError(
                 message=f"instances_to_explain must be a numpy ndarray, but got {type(instances).__name__} instead.",
                 param="instances_to_explain",
-                source="instances_to_explain setter"
+                source="instances_to_explain setter",
             )
         self._instances_to_explain = instances
 
@@ -106,7 +108,7 @@ class CONFETTI:
             raise CONFETTIDataTypeError(
                 message=f"original_labels must be a numpy ndarray, but got {type(labels).__name__} instead.",
                 param="original_labels",
-                source="original_labels setter"
+                source="original_labels setter",
             )
         self._original_labels = labels
 
@@ -115,9 +117,9 @@ class CONFETTI:
         """Reference dataset used for finding nearest unlike neighbours."""
         if self._reference_data is None:
             raise CONFETTIConfigurationError(
-                message = "Reference data has not been set. Please set reference data before accessing it.",
-                param = "reference_data",
-                source = "reference_data property"
+                message="Reference data has not been set. Please set reference data before accessing it.",
+                param="reference_data",
+                source="reference_data property",
             )
         return self._reference_data
 
@@ -128,7 +130,7 @@ class CONFETTI:
             raise CONFETTIDataTypeError(
                 message=f"reference_data must be a numpy ndarray, but got {type(data).__name__} instead.",
                 param="reference_data",
-                source="reference_data setter"
+                source="reference_data setter",
             )
         self._reference_data = data
 
@@ -137,9 +139,9 @@ class CONFETTI:
         """Reference labels corresponding to the reference dataset."""
         if self._reference_labels is None:
             raise CONFETTIConfigurationError(
-                message = "Reference labels have not been set. Please set reference labels before accessing them.",
-                param = "reference_labels",
-                source = "reference_labels property"
+                message="Reference labels have not been set. Please set reference labels before accessing them.",
+                param="reference_labels",
+                source="reference_labels property",
             )
         return self._reference_labels
 
@@ -150,7 +152,7 @@ class CONFETTI:
             raise CONFETTIDataTypeError(
                 message=f"reference_labels must be a numpy ndarray, but got {type(labels).__name__} instead.",
                 param="reference_labels",
-                source="reference_labels setter"
+                source="reference_labels setter",
             )
         self._reference_labels = labels
 
@@ -166,7 +168,7 @@ class CONFETTI:
             raise CONFETTIDataTypeError(
                 message=f"weights must be a numpy ndarray or None, but got {type(weights).__name__} instead.",
                 param="weights",
-                source="weights setter"
+                source="weights setter",
             )
         self._weights = weights
 
@@ -219,8 +221,8 @@ class CONFETTI:
         if self.reference_data is None:
             raise CONFETTIError(
                 message="Reference data is not set. Please ensure that reference data is provided before calling this method.",
-                param = "reference_data",
-                source = "_nearest_unlike_neighbour()"
+                param="reference_data",
+                source="_nearest_unlike_neighbour()",
             )
         X_unlike = self.reference_data[list(unlike_indices)]
 
@@ -232,15 +234,11 @@ class CONFETTI:
                     "global_constraint": "sakoe_chiba",
                     "sakoe_chiba_radius": dtw_window,
                 }
-        knn = KNeighborsTimeSeries(
-            n_neighbors=n_neighbors, metric=distance, metric_params=metric_params
-        )
+        knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance, metric_params=metric_params)
         knn.fit(X_unlike)
 
         # Get nearest neighbors
-        dist, ind = knn.kneighbors(
-            query.reshape(1, query.shape[0], query.shape[1]), return_distance=True
-        )
+        dist, ind = knn.kneighbors(query.reshape(1, query.shape[0], query.shape[1]), return_distance=True)
         actual_indices = unlike_indices[ind[0]]
         candidate_X = self.reference_data[actual_indices]
 
@@ -310,24 +308,18 @@ class CONFETTI:
         if self.weights is None:
             raise CONFETTIError(
                 message="It is not possible to perform the naive stage without feature weights.",
-                param = "weights",
-                source = "_naive_stage()",
-                hint = "Please provide feature weights to enable the naive stage."
+                param="weights",
+                source="_naive_stage()",
+                hint="Please provide feature weights to enable the naive stage.",
             )
         else:
-            starting_point : int = self._findsubarray(w=self.weights[nun_index], k=subarray_length)
+            starting_point: int = self._findsubarray(w=self.weights[nun_index], k=subarray_length)
 
-        perturbed_instance : np.ndarray = np.concatenate(
+        perturbed_instance: np.ndarray = np.concatenate(
             (
                 self.instances_to_explain[instance_index][:starting_point],
-                (
-                    self.reference_data[nun_index][
-                        starting_point : subarray_length + starting_point
-                    ]
-                ),
-                self.instances_to_explain[instance_index][
-                    subarray_length + starting_point :
-                ],
+                (self.reference_data[nun_index][starting_point : subarray_length + starting_point]),
+                self.instances_to_explain[instance_index][subarray_length + starting_point :],
             )
         )
         perturbed_instance_reshaped = perturbed_instance.reshape(
@@ -339,21 +331,13 @@ class CONFETTI:
         while prob_target <= theta:
             subarray_length += 1
 
-            starting_point : int = self._findsubarray(
-                w=self.weights[nun_index], k=subarray_length
-            )
+            starting_point: int = self._findsubarray(w=self.weights[nun_index], k=subarray_length)
 
             perturbed_instance = np.concatenate(
                 (
                     self.instances_to_explain[instance_index][:starting_point],
-                    (
-                        self.reference_data[nun_index][
-                            starting_point : subarray_length + starting_point
-                        ]
-                    ),
-                    self.instances_to_explain[instance_index][
-                        subarray_length + starting_point :
-                    ],
+                    (self.reference_data[nun_index][starting_point : subarray_length + starting_point]),
+                    self.instances_to_explain[instance_index][subarray_length + starting_point :],
                 )
             )
 
@@ -363,12 +347,15 @@ class CONFETTI:
 
             prob_target = model.predict(perturbed_instance_reshaped)[0][self.reference_labels[nun_index]]
 
-        ce_label = np.argmax(model.predict(perturbed_instance_reshaped),axis=1,)
+        ce_label = np.argmax(
+            model.predict(perturbed_instance_reshaped),
+            axis=1,
+        )
 
         if verbose:
             print(f"Naive stage finished for instance {instance_index}")
 
-        counterfactual : Counterfactual = Counterfactual(
+        counterfactual: Counterfactual = Counterfactual(
             counterfactual=perturbed_instance_reshaped,
             label=ce_label[0],
         )
@@ -450,21 +437,17 @@ class CONFETTI:
         """
 
         # Validate that there are at least two objectives to optimize
-        number_of_objectives = (
-            int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
-        )
+        number_of_objectives = int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
         if number_of_objectives < 2:
             raise CONFETTIConfigurationError(
                 "At least two objectives must be optimized. "
                 "Set `optimize_confidence`, `optimize_sparsity`, or `optimize_proximity` to True."
             )
 
-
         query: np.ndarray = self.instances_to_explain[instance_index]
-        nun : np.ndarray = copy.deepcopy(self.reference_data[nun_index])
+        nun: np.ndarray = copy.deepcopy(self.reference_data[nun_index])
         all_counterfactuals: List[Counterfactual] = []
         objective_values: List[np.ndarray] = []
-
 
         high = subsequence_length
         low = 1
@@ -475,9 +458,7 @@ class CONFETTI:
             start_time = time.time()
             window = (low + high) // 2
             if verbose:
-                print(
-                    f"Optimization of CE for Instance {instance_index} in Window {window}"
-                )
+                print(f"Optimization of CE for Instance {instance_index} in Window {window}")
 
             # Timestep where it starts
             if self.weights is None:
@@ -503,9 +484,7 @@ class CONFETTI:
             )
 
             reference_directions = get_reference_directions(
-                name="das-dennis",
-                n_dim=number_of_objectives,
-                n_partitions=n_partitions
+                name="das-dennis", n_dim=number_of_objectives, n_partitions=n_partitions
             )
 
             algorithm = NSGA3(
@@ -528,11 +507,11 @@ class CONFETTI:
                 n_samples = result.X.shape[0]
                 n_timesteps, n_features = query.shape
 
-                results_reshaped : np.ndarray = result.X.reshape(n_samples, window, n_features)
-                perturbations : np.ndarray = np.tile(query, (n_samples, 1, 1))
-                replacement_patch : np.ndarray = nun[starting_point:end_point]
+                results_reshaped: np.ndarray = result.X.reshape(n_samples, window, n_features)
+                perturbations: np.ndarray = np.tile(query, (n_samples, 1, 1))
+                replacement_patch: np.ndarray = nun[starting_point:end_point]
 
-                replacement_patch_broadcast : np.ndarray = np.broadcast_to(
+                replacement_patch_broadcast: np.ndarray = np.broadcast_to(
                     replacement_patch, (n_samples, window, n_features)
                 )
 
@@ -545,18 +524,14 @@ class CONFETTI:
                 predictions = model.predict(perturbations)
                 predicted_labels = np.argmax(predictions, axis=1)
 
-
                 all_counterfactuals.extend(
-                    Counterfactual(counterfactual=cf, label=label)
-                    for cf, label in zip(perturbations, predicted_labels)
+                    Counterfactual(counterfactual=cf, label=label) for cf, label in zip(perturbations, predicted_labels)
                 )
 
                 high = window - 1
             final_time = time.time() - start_time
             if verbose:
-                print(
-                    f"Instance: {instance_index} | Window: {window} | Time: {final_time}"
-                )
+                print(f"Instance: {instance_index} | Window: {window} | Time: {final_time}")
         if verbose:
             print(f"Optimization of CE for Instance {instance_index} finished.")
 
@@ -571,11 +546,11 @@ class CONFETTI:
 
             counterfactuals = CounterfactualSet(
                 original_instance=query,
-                original_label = self.original_labels[instance_index].item(),
+                original_label=self.original_labels[instance_index].item(),
                 nearest_unlike_neighbour=nun,
-                best_solution = best,
+                best_solution=best,
                 all_counterfactuals=all_counterfactuals,
-                feature_importance=self.weights[nun_index] if self.weights is not None else None
+                feature_importance=self.weights[nun_index] if self.weights is not None else None,
             )
 
             return counterfactuals
@@ -654,7 +629,6 @@ class CONFETTI:
                 )
             return None
 
-
         if self.weights is None:
             if verbose:
                 print("No feature weights were found. Skipping naive stage.")
@@ -720,12 +694,12 @@ class CONFETTI:
                     nearest_unlike_neighbour=self.reference_data[nun_index],
                     best_solution=naive,
                     all_counterfactuals=[naive],
-                    feature_importance=self.weights[nun_index]
+                    feature_importance=self.weights[nun_index],
                 )
                 return counterfactual_set
 
-
-    def generate_counterfactuals(self,
+    def generate_counterfactuals(
+        self,
         instances_to_explain: np.ndarray,
         reference_data: np.ndarray,
         reference_weights: Optional[np.ndarray] = None,
@@ -744,7 +718,8 @@ class CONFETTI:
         processes: Optional[int] = None,
         save_counterfactuals: bool = False,
         output_path: Optional[str | Path] = None,
-        verbose: bool = False) -> None| CounterfactualResults:
+        verbose: bool = False,
+    ) -> None | CounterfactualResults:
         """
         Generate counterfactual explanations for multiple instances.
 
@@ -843,13 +818,13 @@ class CONFETTI:
         else:
             self._validate_types(locals())
 
-        self._instances_to_explain : np.ndarray = instances_to_explain
-        self._original_labels : np.ndarray = np.argmax(self.model.predict(self.instances_to_explain), axis=1)
-        self.reference_data : np.ndarray = reference_data
-        self.reference_labels : np.ndarray = np.argmax(self.model.predict(self.reference_data), axis=1)
+        self._instances_to_explain: np.ndarray = instances_to_explain
+        self._original_labels: np.ndarray = np.argmax(self.model.predict(self.instances_to_explain), axis=1)
+        self.reference_data: np.ndarray = reference_data
+        self.reference_labels: np.ndarray = np.argmax(self.model.predict(self.reference_data), axis=1)
         self.weights = reference_weights
 
-        results : None | CounterfactualResults = None
+        results: None | CounterfactualResults = None
 
         if processes is not None:
             results = self._parallelized_generator(
@@ -900,7 +875,6 @@ class CONFETTI:
                     results.to_csv()
 
             return results
-
 
     def _parallelized_generator(
         self,
@@ -959,11 +933,11 @@ class CONFETTI:
         pool.close()
         pool.join()
 
-        self.counterfactual_sets : List[CounterfactualSet]  = []
+        self.counterfactual_sets: List[CounterfactualSet] = []
 
         for r in results:
-            counterfactual_set : CounterfactualSet = r
-            #self.nuns.append(nun)
+            counterfactual_set: CounterfactualSet = r
+            # self.nuns.append(nun)
             if counterfactual_set is not None:
                 self.counterfactual_sets.append(counterfactual_set)
 
@@ -971,7 +945,6 @@ class CONFETTI:
             return CounterfactualResults(counterfactual_sets=self.counterfactual_sets)
         else:
             return None
-
 
     def _generator(
         self,
@@ -990,7 +963,6 @@ class CONFETTI:
         dtw_window: Optional[int] = None,
         verbose: bool = False,
     ) -> None | CounterfactualResults:
-
         """
         Generate counterfactuals sequentially.
 
@@ -1010,7 +982,6 @@ class CONFETTI:
         counterfactual_sets: List[CounterfactualSet] = []
 
         for instance_index in range(len(instances_to_explain)):
-
             nun_index = self._nearest_unlike_neighbour(
                 query=self.instances_to_explain[instance_index],
                 predicted_label=self.original_labels[instance_index].item(),
@@ -1022,7 +993,6 @@ class CONFETTI:
                 if verbose:
                     print(f"Skipping instance {instance_index}: No valid NUN found.")
                 continue
-
 
             if self.weights is not None:
                 naive, subarray_length = self._naive_stage(
@@ -1098,8 +1068,7 @@ class CONFETTI:
                     continue
 
         if counterfactual_sets:
-            return CounterfactualResults(
-                counterfactual_sets=counterfactual_sets)
+            return CounterfactualResults(counterfactual_sets=counterfactual_sets)
         else:
             return None
 
@@ -1126,7 +1095,7 @@ class CONFETTI:
             Starting index of the contiguous subsequence of length `k` with the highest total weight.
         """
         start = 0
-        max_sum = curr_sum = sum(w[start: start + k])
+        max_sum = curr_sum = sum(w[start : start + k])
         for i in range(1, len(w) - k + 1):
             curr_sum -= w[i - 1]
             curr_sum += w[i + k - 1]
@@ -1137,9 +1106,7 @@ class CONFETTI:
 
     @staticmethod
     def _select_best_solution(
-            counterfactuals: List[Counterfactual],
-            objective_values: np.ndarray,
-            alpha: int | float
+        counterfactuals: List[Counterfactual], objective_values: np.ndarray, alpha: int | float
     ) -> Counterfactual:
         """Select the most relevant counterfactual from a counterfactual set given user weights.
 
@@ -1214,9 +1181,7 @@ class CONFETTI:
             value = arguments.get(name)
             if not isinstance(value, expected):
                 expected_name = (
-                    ", ".join(t.__name__ for t in expected)
-                    if isinstance(expected, tuple)
-                    else expected.__name__
+                    ", ".join(t.__name__ for t in expected) if isinstance(expected, tuple) else expected.__name__
                 )
                 raise CONFETTIConfigurationError(
                     f"{context + ': ' if context else ''}"
@@ -1229,6 +1194,5 @@ class CONFETTI:
         if save:
             if output_path is not None and not isinstance(output_path, (str, Path)):
                 raise CONFETTIConfigurationError(
-                    f"{context + ': ' if context else ''}"
-                    "`output_path` must be a None or a valid string."
+                    f"{context + ': ' if context else ''}`output_path` must be a None or a valid string."
                 )

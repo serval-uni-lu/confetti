@@ -25,18 +25,21 @@ class CONFETTIError(Exception):
     hint: Optional[str]
     source: Optional[str]
 
-    def __init__(self,
-                 message: str,
-                 config: Optional[Mapping[str, Any]] = None,
-                 param: Optional[str] = None,
-                 hint: Optional[str] = None,
-                 source: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        config: Optional[Mapping[str, Any]] = None,
+        param: Optional[str] = None,
+        hint: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.config = config
         self.param = param
         self.hint = hint
         self.source = source
+
 
 class CONFETTIConfigurationError(CONFETTIError):
     """
@@ -56,13 +59,16 @@ class CONFETTIConfigurationError(CONFETTIError):
         Where the configuration came from.
     """
 
-    def __init__(self,
-                 message: str,
-                 config: Optional[Mapping[str, Any]] = None,
-                 param: Optional[str] = None,
-                 hint: Optional[str] = None,
-                 source: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        config: Optional[Mapping[str, Any]] = None,
+        param: Optional[str] = None,
+        hint: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> None:
         super().__init__(message, config, param, hint, source)
+
 
 class CONFETTIDataTypeError(CONFETTIError):
     """
@@ -82,10 +88,12 @@ class CONFETTIDataTypeError(CONFETTIError):
         Where the configuration came from.
     """
 
-    def __init__(self,
-                 message: str,
-                 config: Optional[Mapping[str, Any]] = None,
-                 param: Optional[str] = None,
-                 hint: Optional[str] = None,
-                 source: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        config: Optional[Mapping[str, Any]] = None,
+        param: Optional[str] = None,
+        hint: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> None:
         super().__init__(message, config, param, hint, source)

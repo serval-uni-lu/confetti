@@ -85,12 +85,8 @@ class CounterfactualProblem(Problem):
         self.proximity_distance = proximity_distance
         self.dtw_window = dtw_window
         self.theta = theta
-        n_var: int = original_instance.shape[1] * (
-            self.subsequence_length
-        )  # Here, shape[1] are the no. of channels
-        n_obj: int = (
-            int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
-        )
+        n_var: int = original_instance.shape[1] * (self.subsequence_length)  # Here, shape[1] are the no. of channels
+        n_obj: int = int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
         self.iterations = 0
         self.batches: np.ndarray = np.array([])
 
@@ -186,15 +182,9 @@ class CounterfactualProblem(Problem):
         """
         metric_name = metric.lower()
         if metric_name == "euclidean":
-            return np.sqrt(
-                np.sum(
-                    (counterfactuals - original_instance[None, :, :]) ** 2, axis=(1, 2)
-                )
-            )
+            return np.sqrt(np.sum((counterfactuals - original_instance[None, :, :]) ** 2, axis=(1, 2)))
         else:
-            tslearn_distance_function = self._select_tslearn_distance_function(
-                metric_name=metric_name
-            )
+            tslearn_distance_function = self._select_tslearn_distance_function(metric_name=metric_name)
 
         X = counterfactuals  # (N, T, C)
         Y = original_instance[None, :, :]  # (1, T, C)
@@ -233,7 +223,7 @@ class CounterfactualProblem(Problem):
             "softdtw": "cdist_soft_dtw",
             "gak": "cdist_gak",
         }
-        cdist_function_name : None | str = name_map.get(metric_name.lower())
+        cdist_function_name: None | str = name_map.get(metric_name.lower())
 
         if cdist_function_name:
             return getattr(tslearn_metrics, cdist_function_name)
