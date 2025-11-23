@@ -33,6 +33,9 @@ jobs:
       - name: Sync environment
         run: uv sync
 
+      - name: Install package
+        run: uv pip install -e .
+
       - name: Run tests
         run: uv run pytest --maxfail=1 --disable-warnings -q
 
