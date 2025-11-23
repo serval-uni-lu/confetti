@@ -2,37 +2,43 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Tuple
+from confetti.errors import CONFETTIConfigurationError
 
 
 def convert_string_to_array(data_string: str, timesteps: int, channels: int) -> np.ndarray:
-    """
-    Convert a serialized array string back into a 2D NumPy array (timesteps, channels).
+    """Convert a serialized array string into a 2D NumPy array.
+
+    This function reconstructs a flattened, space-separated string
+    representation of an array into a 2D array of shape
+    ``(timesteps, channels)``. Brackets and line breaks are removed
+    automatically.
 
     Parameters
     ----------
     data_string : str
-        String representation of the array, typically flattened and bracketed.
+        The flattened array stored as a whitespace-separated string.
     timesteps : int
-        Expected number of time steps.
+        Number of expected time steps in the reconstructed array.
     channels : int
-        Expected number of channels.
+        Number of expected channels in the reconstructed array.
 
     Returns
     -------
-    np.ndarray
-        Array of shape (timesteps, channels).
+    ndarray of shape (timesteps, channels)
+        The reconstructed numeric array.
 
     Raises
     ------
-    ValueError
-        If the number of elements does not match the expected size.
+    CONFETTIConfigurationError
+        If the number of parsed elements does not match
+        ``timesteps * channels``.
     """
     cleaned = data_string.replace("[", "").replace("]", "").replace("\n", "")
     values = np.fromstring(cleaned, sep=" ")
 
     expected_size = timesteps * channels
     if values.size != expected_size:
-        raise ValueError(
+        raise CONFETTIConfigurationError(
             f"Data does not match expected size ({timesteps}, {channels}). "
             f"Found {values.size} elements."
         )
@@ -41,17 +47,28 @@ def convert_string_to_array(data_string: str, timesteps: int, channels: int) -> 
 
 
 def save_multivariate_ts_as_csv(file_path: str | Path, x: np.ndarray, y: np.ndarray) -> None:
-    """
-    Save a multivariate time series dataset to CSV in long format. The main CSV stores features per sample and time step. A companion CSV stores one label per sample.
+    """Save a multivariate time-series dataset to CSV in long format.
+
+    The time-series array ``x`` is converted into a long-format table where
+    each row corresponds to one sample–time-step pair. The function also
+    writes a companion ``*_labels.csv`` file storing a single label per
+    sample.
 
     Parameters
     ----------
     file_path : str or Path
         Destination path for the main CSV file.
-    x : np.ndarray
-        Array of shape (n_samples, n_time_steps, n_features).
-    y : np.ndarray
-        Array of shape (n_samples,) containing labels.
+    x : ndarray of shape (n_samples, n_time_steps, n_features)
+        The multivariate time series data.
+    y : ndarray of shape (n_samples,)
+        The label associated with each sample.
+
+    Note
+    -----
+    Two files are written:
+
+    - ``<file>.csv``: long-format feature table
+    - ``<file>_labels.csv``: labels indexed by ``sample_id``
     """
     file_path = Path(file_path)
     n_samples, n_time_steps, n_features = x.shape
@@ -73,19 +90,30 @@ def save_multivariate_ts_as_csv(file_path: str | Path, x: np.ndarray, y: np.ndar
 def load_multivariate_ts_from_csv(
         file_path: str | Path
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Load a multivariate time series dataset saved using ``save_multivariate_ts_as_csv``.
+    """Load a multivariate time-series dataset saved with ``save_multivariate_ts_as_csv``.
+
+    This function reconstructs the original ``X`` array by reshaping the
+    long-format CSV and retrieves the sample-level labels from the companion
+    ``*_labels.csv`` file.
 
     Parameters
     ----------
     file_path : str or Path
-        Path to the main CSV file.
+        Path to the main feature CSV file.
 
     Returns
     -------
-    tuple
-        ``X``: np.ndarray of shape (n_samples, n_time_steps, n_features)
-        ``y`` : np.ndarray of shape (n_samples,)
+    X : ndarray of shape (n_samples, n_time_steps, n_features)
+        The reconstructed multivariate time series.
+    y : ndarray of shape (n_samples,)
+        The label associated with each sample.
+
+    Note
+    -----
+    The function expects two files in the same directory:
+
+    - ``<file>.csv``
+    - ``<file>_labels.csv``
     """
     file_path = Path(file_path)
     df = pd.read_csv(file_path)
@@ -103,17 +131,19 @@ def load_multivariate_ts_from_csv(
 
 
 def array_to_string(arr: np.ndarray) -> str:
-    """
-    Convert a NumPy array into a single-line space-separated string.
+    """Convert a NumPy array into a single-line space-separated string.
+
+    Useful for serializing arrays into CSV files where nested structures
+    are not supported.
 
     Parameters
     ----------
-    arr : np.ndarray
-        Array to convert.
+    arr : ndarray
+        The array to be flattened and serialized.
 
     Returns
     -------
     str
-        Flattened string representation.
+        A flattened, space-separated representation of the array.
     """
     return " ".join(map(str, arr.flatten()))

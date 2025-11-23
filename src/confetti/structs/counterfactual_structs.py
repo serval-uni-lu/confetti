@@ -9,18 +9,18 @@ from pathlib import Path
 
 @dataclass
 class Counterfactual:
-    """A class to store a single counterfactual explanation results.
+    """Container for a single counterfactual instance and its predicted label.
 
-    Parameters
-    ----------
-    counterfactual : np.array
-        The counterfactual instance.
-    label : str | int | float
-        The label of the counterfactual instance.
+    Note
+    ----
+        This class is a lightweight structure used internally by
+        :class:`~confetti.explainer.counterfactual_structs.CounterfactualSet`.
     """
-
     counterfactual: np.ndarray
+    """The generated counterfactual time series."""
+
     label: str | int | float
+    """The predicted label corresponding to the counterfactual."""
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Counterfactual):
@@ -31,42 +31,31 @@ class Counterfactual:
                 np.array_equal(self.counterfactual, other.counterfactual)
         )
 
-
 class CounterfactualSet:
-    """A class to store all counterfactual explanation results for a single instance.
+    """Container for all counterfactual explanations generated for one instance.
 
     Parameters
     ----------
-    original_instance : np.array
-        The original instance for which counterfactuals were generated.
-    original_label : str | int | float
-        The label of the original instance.
-    nearest_unlike_neighbour : np.array
-        The nearest unlike neighbour to the original instance.
-    best_solution : Counterfactual
-        The best counterfactual solution found.
-    all_counterfactuals : List[Counterfactual]
-        A list of all counterfactuals generated for the original instance.
-
-    Attributes
-    ----------
     original_instance : np.ndarray
         The original instance for which counterfactuals were generated.
+    original_label : str | int | float | np.int64 | np.float64
+        The predicted label of the original instance.
     nearest_unlike_neighbour : np.ndarray
-        The nearest unlike neighbour to the original instance.
-    best : Counterfactual
-        The best counterfactual solution found.
-    all_counterfactuals : List[Counterfactual]
-        A list of all counterfactuals generated for the original instance.
-
-    Methods
-    -------
-    to_dataframe() -> pd.DataFrame
-        Export all counterfactuals to a pandas DataFrame.
-    output_path: Path | str = Path("./counterfactuals_all_instances.csv")
-        Export all counterfactuals to a CSV file.
+        The nearest unlike neighbour (NUN) of the original instance.
+    best_solution : Counterfactual or None
+        The best counterfactual solution identified by the method.
+    all_counterfactuals : list of Counterfactual
+        All counterfactuals generated for this instance.
+    feature_importance : np.ndarray or None, optional
+        Optional 1D array of feature-importance values (e.g., CAM weights)
+        for the nearest unlike neighbour.
 
 
+    Note
+    ----
+        This object stores all counterfactual candidates for a single instance,
+        together with metadata such as the NUN and optional importance weights.
+        It provides convenience methods for exporting structured results.
     """
 
     def __init__(self,
@@ -93,37 +82,78 @@ class CounterfactualSet:
 
     @property
     def original_instance(self) -> np.ndarray:
+        """Return the original instance.
+
+        Returns
+        -------
+        np.ndarray
+            The original instance for which counterfactuals were generated.
+        """
         return self._original_instance
 
     @property
     def original_label(self) -> Union[str, int, float, np.int64, np.float64]:
+        """Return the predicted label of the original instance.
+
+        Returns
+        -------
+        str | int | float | np.int64 | np.float64
+            The predicted label.
+        """
         return self._original_label
 
     @property
     def nearest_unlike_neighbour(self) -> np.ndarray:
+        """Return the nearest unlike neighbour.
+
+        Returns
+        -------
+        np.ndarray
+            The nearest unlike neighbour instance.
+        """
         return self._nearest_unlike_neighbour
 
     @property
     def best(self) -> Counterfactual:
+        """Return the best counterfactual solution.
+
+        Returns
+        -------
+        Counterfactual
+            The best counterfactual, selected according to the
+            method's optimization criteria.
+        """
         return self._best
 
     @property
     def all_counterfactuals(self) -> List[Counterfactual]:
+        """Return all generated counterfactuals.
+
+        Returns
+        -------
+        list of Counterfactual
+            All counterfactual candidates generated for this instance.
+        """
         return self._all_counterfactuals
 
     @property
     def feature_importance(self) -> Optional[np.ndarray]:
-        """Optional 1D array of feature weights for the nearest unlike neighbour."""
+        """Return the optional feature-importance vector.
+
+        Returns
+        -------
+        np.ndarray or None
+            A 1D array of feature-importance weights, or ``None`` if not provided.
+        """
         return self._feature_importance
 
     def to_dataframe(self) -> pd.DataFrame:
-        """
-        Export all counterfactuals to a pandas DataFrame.
+        """Return all counterfactuals as a pandas DataFrame.
 
         Returns
         -------
         pd.DataFrame
-            A DataFrame containing all counterfactuals and their details.
+            A DataFrame where each row corresponds to one counterfactual.
         """
 
         if self.all_counterfactuals is None or len(self.all_counterfactuals) == 0:
@@ -147,13 +177,16 @@ class CounterfactualSet:
             return df
 
     def to_csv(self, output_path: Path | str = Path("./counterfactuals_all_instances.csv")) -> None:
-        """
-        Export all counterfactuals to a CSV file.
+        """Export all counterfactuals to a CSV file.
 
         Parameters
         ----------
-        output_path : str
-            The file path where the CSV will be saved.
+        output_path : str or Path, default="./counterfactuals_all_instances.csv"
+            Destination file path for the exported CSV.
+
+        Returns
+        -------
+        None
         """
 
         if not isinstance(output_path, (str, Path)):
@@ -239,24 +272,20 @@ class CounterfactualSet:
 
 
 class CounterfactualResults:
-    """A class to store counterfactual explanation results for multiple instances.
+    """Container for counterfactual results across multiple instances.
 
     Parameters
     ----------
-    counterfactual_sets : List[CounterfactualSet]
-        A list of CounterfactualSet objects, each representing counterfactuals for a specific instance.
+    counterfactual_sets : list of CounterfactualSet or None, optional
+        A list of :class:`CounterfactualSet` objects, each corresponding to
+        one explained instance. If ``None``, the container is initialized empty.
 
-    Attributes
-    ----------
-    counterfactual_sets : List[CounterfactualSet]
-        A list of CounterfactualSet objects containing counterfactuals for multiple instances.
+    Note
+    ----
+        This class acts as a higher-level aggregator over multiple
+        :class:`CounterfactualSet` objects. It provides convenience methods
+        for exporting structured results for all instances at once.
 
-    Methods
-    -------
-    to_dataframe() -> pd.DataFrame
-        Export all counterfactuals for all instances to a pandas DataFrame.
-    to_csv(output_path: Path | str = Path("./counterfactuals_all_instances.csv")) -> None
-        Export all counterfactuals for all instances to a CSV file.
     """
 
     def __init__(self, counterfactual_sets: Optional[List[CounterfactualSet]] = None):
@@ -265,14 +294,21 @@ class CounterfactualResults:
 
     @property
     def counterfactual_sets(self) -> List[CounterfactualSet]:
+        """Return the list of stored counterfactual sets.
+
+        Returns
+        -------
+        list of CounterfactualSet
+            The stored counterfactual sets.
+        """
         return self._counterfactual_sets
 
     def __len__(self) -> int:
-        """Return the number of CounterfactualSet objects stored."""
+        """Return the number of stored counterfactual sets."""
         return len(self._counterfactual_sets or [])
 
     def __getitem__(self, index: int) -> CounterfactualSet:
-        """Return the CounterfactualSet at the specified index."""
+        """Return the counterfactual set at the specified index."""
         if self._counterfactual_sets is None:
             raise CONFETTIError(
                 message="No counterfactual sets available for indexing.",
@@ -282,13 +318,12 @@ class CounterfactualResults:
         return self._counterfactual_sets[index]
 
     def to_dataframe(self) -> pd.DataFrame:
-        """
-        Export all counterfactuals for all instances to a pandas DataFrame.
+        """Return all counterfactuals across all instances as a DataFrame.
 
         Returns
         -------
         pd.DataFrame
-            A DataFrame containing all counterfactuals and their details for all instances.
+            A DataFrame containing all counterfactuals for all instances.
         """
 
         if self.counterfactual_sets is None or len(self.counterfactual_sets) == 0:
@@ -301,13 +336,16 @@ class CounterfactualResults:
             return pd.concat([ces.to_dataframe() for ces in self.counterfactual_sets], ignore_index=True)
 
     def to_csv(self, output_path: Path | str = Path("./counterfactuals.csv")) -> None:
-        """
-        Export all counterfactuals for all instances to a CSV file.
+        """Export all counterfactuals for all instances to a CSV file.
 
         Parameters
         ----------
-        output_path : Path
-            The file path where the CSV will be saved.
+        output_path : str or Path, default="./counterfactuals.csv"
+            Destination file path for the exported CSV.
+
+        Returns
+        -------
+        None
         """
         if not isinstance(output_path, (str, Path)):
             raise CONFETTIError(

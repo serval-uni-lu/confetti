@@ -1,7 +1,7 @@
 # CONFETTI: Counterfactual Explanations for Multivariate Time Series
 
 ---
-
+![License](https://img.shields.io/github/license/serval-uni-lu/confetti)
 
 **CONFETTI** is a multi-objective method for generating **counterfactual explanations for multivariate time series**. 
 It identifies the most influential subsequences, constructs a minimal perturbation, and optimizes it under multiple objectives to produce **sparse**, **realistic**, and **confidence-increasing** counterfactuals 

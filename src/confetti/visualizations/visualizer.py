@@ -9,21 +9,35 @@ from confetti.errors import (
     CONFETTIConfigurationError,
     CONFETTIDataTypeError,
 )
-from confetti.explainer.counterfactual_structs import Counterfactual
+from confetti.structs import Counterfactual
 
 
 def _normalize_series(series: np.ndarray | Counterfactual, param_name: str) -> np.ndarray:
     """
-    Normalize an input time series to shape (timesteps, channels).
+    Normalize a time series to shape ``(timesteps, channels)``.
 
-    Accepts either:
-    - (timesteps, channels)
-    - (1, timesteps, channels)
+    This helper accepts the following input shapes:
+
+    - ``(timesteps, channels)`` — returned unchanged
+    - ``(1, timesteps, channels)`` — squeezed to ``(timesteps, channels)``
+    - ``Counterfactual`` — its internal array is used
+
+    Parameters
+    ----------
+    series : ndarray or Counterfactual
+        Input time series.
+    param_name : str
+        Name of the parameter (used for error reporting).
+
+    Returns
+    -------
+    ndarray of shape (timesteps, channels)
+        The normalized time series.
 
     Raises
     ------
     CONFETTIDataTypeError
-        If the input does not have a supported shape.
+        If the input is not a supported type or shape.
     """
     if not isinstance(series, (np.ndarray, Counterfactual)):
         raise CONFETTIDataTypeError(
@@ -57,19 +71,27 @@ def _select_channels(
     channels: Optional[Sequence[int]],
 ) -> Tuple[np.ndarray, Sequence[int]]:
     """
-    Select channels from a multivariate time series of shape (timesteps, channels).
+    Select specific channels from a multivariate time series.
 
-    Rules
-    -----
-    - If `channels` is provided:
-        * Use exactly those channels.
-    - If `channels` is None:
-        * Use all channels.
+    Parameters
+    ----------
+    series : ndarray of shape (timesteps, channels)
+        Multivariate time series.
+    channels : sequence of int or None
+        Indices of channels to keep. If ``None``, all channels are used.
+
+    Returns
+    -------
+    tuple
+        ``(series_subset, selected_indices)`` where:
+
+        - ``series_subset`` is the sliced array with selected channels
+        - ``selected_indices`` is the list of channel indices actually used
 
     Raises
     ------
     CONFETTIConfigurationError
-        If indices in `channels` are out of bounds.
+        If a channel index is out of bounds.
     """
 
     timesteps, n_channels = series.shape
@@ -104,14 +126,15 @@ def plot_time_series(
 
     Parameters
     ----------
-    series
-        Time series with shape (timesteps, channels) or (1, timesteps, channels).
-    channels
-        Optional list of channel indices to plot.
-    figsize
-        Optional matplotlib figure size. If None, chosen based on number of channels.
-    title
-        Optional title for the figure.
+    series : ndarray or Counterfactual
+        Time series with shape ``(timesteps, channels)`` or
+        ``(1, timesteps, channels)``.
+    channels : sequence of int, optional
+        Channel indices to plot. If ``None``, all channels are plotted.
+    figsize : tuple of float, optional
+        Figure size passed to Matplotlib. If ``None``, determined automatically.
+    title : str, optional
+        Title of the figure.
 
     Raises
     ------
@@ -162,31 +185,34 @@ def plot_counterfactual(
     title: Optional[str] = None,
 ) -> None:
     """
-    Plot an original multivariate time series and its counterfactual.
+    Plot an original multivariate time series together with its counterfactual.
 
-    The counterfactual is assumed to be a modification of the original over a
-    contiguous subsequence. The differing region is highlighted and connected
-    smoothly at the boundaries.
+    The counterfactual is assumed to differ from the original over a contiguous
+    subsequence, which is highlighted in the visualization. Optional CAM
+    information can be overlaid either as a line or as a heatmap.
 
     Parameters
     ----------
-    original
-        Original time series with shape (timesteps, channels) or (1, timesteps, channels).
-    counterfactual
-        Counterfactual object containing a `counterfactual` array of the same shape as `original`.
-    channels
-        Optional list of channel indices to plot.
-    cam_weights
-        Optional 1D array of CAM weights with length equal to `timesteps`.
-        Used when `cam_mode` is `"line"` or `"heatmap"`.
-    cam_mode
-        One of:
-        - "none": no CAM overlay.
-        - "line": plot CAM as a line in each subplot (same axis as the series).
-        - "heatmap": show CAM as a separate heatmap subplot beneath the time series.
-    figsize
-        Optional matplotlib figure size. If None, chosen based on layout and number of channels.
-    title
+    original : ndarray
+        Original time series with shape ``(timesteps, channels)`` or
+        ``(1, timesteps, channels)``.
+    counterfactual : Counterfactual
+        Counterfactual object whose internal ``counterfactual`` array has the
+        same shape as ``original``.
+    channels : sequence of int, optional
+        Channel indices to plot. If ``None``, all channels are shown.
+    cam_weights : ndarray of shape (timesteps,), optional
+        CAM weights to overlay. Used when ``cam_mode`` is ``"line"`` or
+        ``"heatmap"``.
+    cam_mode : {"none", "line", "heatmap"}, default="none"
+        Type of CAM visualization to include:
+
+        - ``"none"``: no CAM overlay
+        - ``"line"``: CAM shown as a line in each subplot
+        - ``"heatmap"``: CAM shown as a separate heatmap subplot
+    figsize : tuple of float, optional
+        Figure size passed to Matplotlib. If ``None``, chosen automatically.
+    title : str, optional
         Optional title for the figure.
 
     Raises
@@ -194,7 +220,7 @@ def plot_counterfactual(
     CONFETTIDataTypeError
         If the time series arrays have incompatible shapes or invalid types.
     CONFETTIConfigurationError
-        If `channels` are invalid or CAM configuration is inconsistent.
+        If ``channels`` are invalid or if CAM settings are inconsistent.
     """
     original_2d = _normalize_series(original, param_name="original")
 
