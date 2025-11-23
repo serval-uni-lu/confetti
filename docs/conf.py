@@ -8,12 +8,13 @@
 import os
 import sys
 from datetime import datetime
+
 sys.path.insert(0, os.path.abspath(".."))
 
-project = 'CONFETTI'
-copyright = f'{datetime.today().year}, Alan Paredes Cetina'
-author = 'Alan Paredes Cetina'
-release = '0.1.0'
+project = "CONFETTI"
+copyright = f"{datetime.today().year}, Alan Paredes Cetina"
+author = "Alan Paredes Cetina"
+release = "0.1.0"
 docstitle = "CONFETTI"
 
 # -- General configuration ---------------------------------------------------
@@ -29,9 +30,8 @@ extensions = [
 autosummary_generate = True
 
 
-templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
-
+templates_path = ["_templates"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -39,8 +39,8 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 html_title = "CONFETTI Documentation"
 html_short_title = "CONFETTI"
-html_theme = 'furo'
-html_static_path = ['_static']
+html_theme = "furo"
+html_static_path = ["_static"]
 pygments_style = "friendly"
 html_theme_options = {
     "source_repository": "https://github.com/serval-uni-lu/confetti/",
@@ -72,5 +72,3 @@ html_theme_options = {
         },
     ],
 }
-
-

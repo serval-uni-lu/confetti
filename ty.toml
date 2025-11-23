@@ -1,6 +1,6 @@
 [src]
 exclude = [
-    "test_weight_filtering.py",
+    "tests",
     "paper",
     ".bzr",
     ".direnv",
