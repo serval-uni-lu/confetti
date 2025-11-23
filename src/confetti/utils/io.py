@@ -33,14 +33,28 @@ def convert_string_to_array(data_string: str, timesteps: int, channels: int) -> 
         If the number of parsed elements does not match
         ``timesteps * channels``.
     """
-    cleaned = data_string.replace("[", "").replace("]", "").replace("\n", "")
-    values = np.fromstring(cleaned, sep=" ")
+    cleaned = data_string.replace("[", "").replace("]", "").replace("\n", " ")
+    try:
+        values = np.fromstring(cleaned, sep=" ")
+    except ValueError as exc:
+        raise CONFETTIConfigurationError(
+            f"Failed to parse numeric values from input: {data_string}",
+            param="data_string",
+            hint="Ensure the string contains only numeric values separated by spaces.",
+            source="convert_string_to_array",
+        ) from exc
 
     expected_size = timesteps * channels
     if values.size != expected_size:
         raise CONFETTIConfigurationError(
-            f"Data does not match expected size ({timesteps}, {channels}). "
-            f"Found {values.size} elements."
+            message=(
+                f"Data does not match expected size ({timesteps}, {channels}). "
+                f"Found {values.size} elements."
+            ),
+            config={"data_string": data_string},
+            param="data_string",
+            hint="Ensure the flattened string contains the correct number of whitespace-separated values.",
+            source="convert_string_to_array",
         )
 
     return values.reshape(timesteps, channels)

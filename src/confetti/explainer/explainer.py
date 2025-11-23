@@ -35,24 +35,27 @@ class CONFETTI:
     It supports confidence-based constraints, sparsity control, and optional
     proximity minimization.
     """
-    def __init__(self, model_path: None | Path | str = None):
+    def __init__(self, model_path: Path | str ):
         """
         Initialize a CONFETTI explainer.
 
         Parameters
         ----------
-        model_path : str or Path or None, default=None
-            Path to a trained model. Models saved with '.keras' or '.h5'
+        model_path : str or Path
+            Path to a trained model. Models saved with '.keras'
             are loaded with Keras; files ending in '.joblib' are loaded
-            with joblib. When None, the model must be loaded manually.
+            with joblib.
         """
         if not isinstance(model_path, (str,Path)):
             raise CONFETTIConfigurationError(
-                f"model_path must be a valid string or Path to the trained model, "
-                f"but got {type(model_path).__name__} instead."
+                message="model_path must be a valid string or Path to the trained model.",
+                config={"received_type": type(model_path).__name__},
+                param="model_path",
+                hint="Pass a valid file path ending in `.keras` or `.joblib`.",
+                source="ConfettiExplainer.__init__",
             )
-        self._model_path = model_path
-        if model_path is not None:
+        else:
+            self._model_path = model_path
             if str(model_path).endswith(".joblib"):
                 self._model = joblib.load(str(model_path))
             else:
@@ -66,7 +69,7 @@ class CONFETTI:
         self.nuns: List[int] = []
 
     @property
-    def model_path(self) -> None | str:
+    def model_path(self) -> str:
         """Return the path to the trained model."""
         return self._model_path
 
@@ -380,7 +383,7 @@ class CONFETTI:
         model,
         alpha: float = 0.5,
         theta: float = 0.51,
-        n_partitions: int = 12,
+        n_partitions: int = 3,
         population_size: int = 100,
         maximum_number_of_generations: float = 100,
         crossover_probability: float = 1.0,
@@ -582,7 +585,7 @@ class CONFETTI:
         test_instance: int,
         alpha: float = 0.5,
         theta: float = 0.51,
-        n_partitions: int = 12,
+        n_partitions: int = 3,
         population_size: int = 100,
         maximum_number_of_generations: float = 100,
         crossover_probability: float = 1.0,
@@ -728,7 +731,7 @@ class CONFETTI:
         reference_weights: Optional[np.ndarray] = None,
         alpha: float = 0.5,
         theta: float = 0.51,
-        n_partitions: int = 12,
+        n_partitions: int = 3,
         population_size: int = 100,
         maximum_number_of_generations: int = 100,
         crossover_probability: float = 1.0,
@@ -763,7 +766,7 @@ class CONFETTI:
         theta : float, default=0.51
             Minimum predicted probability required for a counterfactual to be
             considered valid.
-        n_partitions : int, default=12
+        n_partitions : int, default=3
             Number of partitions used to construct the reference directions
             for the NSGA-III algorithm. Larger values create a denser set of
             directions and may increase search resolution at the cost of runtime.
@@ -903,7 +906,7 @@ class CONFETTI:
         self,
         alpha: float = 0.5,
         theta: float = 0.51,
-        n_partitions: int = 12,
+        n_partitions: int = 3,
         population_size: int = 100,
         maximum_number_of_generations: int = 100,
         crossover_probability: float = 1.0,
@@ -975,7 +978,7 @@ class CONFETTI:
         instances_to_explain: np.ndarray,
         alpha: float = 0.5,
         theta: float = 0.51,
-        n_partitions: int = 12,
+        n_partitions: int = 3,
         population_size: int = 100,
         maximum_number_of_generations: int = 100,
         crossover_probability: float = 1.0,
@@ -1034,7 +1037,7 @@ class CONFETTI:
                         print(f"Skipping instance {instance_index}: No valid naive counterfactual found.")
                     continue
 
-                optimized: CounterfactualSet = self._optimization(
+                optimized: None | CounterfactualSet = self._optimization(
                     instance_index=instance_index,
                     nun_index=nun_index,
                     subsequence_length=subarray_length,
@@ -1068,7 +1071,7 @@ class CONFETTI:
                 if verbose:
                     print("Skipping Naive Stage as no weights were provided.")
 
-                optimized: CounterfactualSet = self._optimization(
+                optimized: None | CounterfactualSet = self._optimization(
                     instance_index=instance_index,
                     nun_index=nun_index,
                     subsequence_length=self.instances_to_explain.shape[1],
