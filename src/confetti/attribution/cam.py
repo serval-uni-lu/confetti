@@ -1,34 +1,66 @@
 import numpy as np
 import keras
 from keras.src.layers import Conv1D, Dense
+from confetti.errors import CONFETTIConfigurationError
 
 def cam(
     model,
     X_data : np.ndarray,
 ):
-    """
-    Compute Class Activation Maps (CAMs) for a given Keras model and dataset.
+    """Compute Class Activation Maps (CAMs) [1]_. for 1D convolutional classifiers.
 
-    This version automatically:
-      - Finds the last Conv1D layer (feature map source)
-      - Finds the final Dense classifier layer
-      - Ensures channel counts match
-      - Computes CAM without any architecture-specific assumptions
+    This function computes class activation maps for a trained Keras model
+    by combining the activations of the final ``Conv1D`` layer with the
+    weights of the final ``Dense`` classifier layer. It highlights the
+    temporal regions most influential for the model’s predicted class.
 
-    Parameters:
-        model (keras.Model): A trained Keras model.
-        X_data (numpy.ndarray): Input time series (n_samples, timesteps, channels).
-        dataset (str): Optional, unused but kept for compatibility.
-        data_type (str): Optional, kept for compatibility.
+    Parameters
+    ----------
+    model : keras.Model
+        A trained Keras model containing at least one ``Conv1D`` layer
+        followed by a ``Dense`` classification layer.
+    X_data : ndarray of shape (n_samples, timesteps, channels)
+        Input multivariate time series for which CAMs will be computed.
 
-    Returns:
-        numpy.ndarray: CAM weights of shape (n_samples, timesteps).
+    Returns
+    -------
+    ndarray of shape (n_samples, timesteps)
+        The class activation map for each input instance.
+
+    Raises
+    ------
+    CONFETTIConfigurationError
+        If no ``Conv1D`` layer is found, if no ``Dense`` output layer is
+        present, or if the number of filters in the final convolutional
+        layer does not match the input dimensionality of the classifier layer.
+
+    Note
+    -----
+    The CAM for a given instance is defined as::
+
+        CAM(t) = Σ_k w[k, c] * A[k, t]
+
+    where:
+        - ``A[k, t]`` is the activation of filter ``k`` at timestep ``t``
+          from the final convolutional layer.
+        - ``w[:, c]`` are the weights connecting each filter to the
+          predicted class ``c`` in the final dense layer.
+
+
+    References
+    ----------
+    .. [1] Zhou, B., Khosla, A., Lapedriza, A., Oliva, A., & Torralba, A. (2016).
+        Learning deep features for discriminative localization.
+        In Proceedings of the IEEE conference on computer vision and pattern recognition (pp. 2921-2929).
     """
 
 
     conv_layers = [layer for layer in model.layers if isinstance(layer, Conv1D)]
     if not conv_layers:
-        raise ValueError("No Conv1D layers found in model. CAM requires a Conv1D backbone.")
+        raise CONFETTIConfigurationError(
+            message="No Conv1D layers found in model. CAM requires a Conv1D backbone.",
+            param="model",
+            )
 
     last_conv_layer = conv_layers[-1]
 
@@ -65,7 +97,7 @@ def cam(
 
         # Sanity check: filters must match classifier input dimension
         if filters != w_k_c.shape[0]:
-            raise ValueError(
+            raise CONFETTIConfigurationError(
                 f"Mismatch between last Conv1D output channels ({filters}) "
                 f"and classifier input features ({w_k_c.shape[0]})."
                 "\nCAM requires these to match."

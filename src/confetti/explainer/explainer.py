@@ -1,9 +1,9 @@
 from confetti.errors import CONFETTIConfigurationError, CONFETTIError, CONFETTIDataTypeError
 from confetti.explainer._counterfactual_problem import CounterfactualProblem
-from confetti.explainer.counterfactual_structs import Counterfactual, CounterfactualSet, CounterfactualResults
+from confetti.structs import Counterfactual, CounterfactualSet, CounterfactualResults
 
 import time
-from typing import Optional, List, Tuple, Union
+from typing import Optional, List, Tuple
 import warnings
 import copy
 from pathlib import Path
@@ -26,11 +26,25 @@ from multiprocessing import Pool
 from functools import partial
 
 class CONFETTI:
-    def __init__(self, model_path: Union[None,Path,str] = None):
+    """
+    CONFETTI explainer.
+
+    CONFETTI generates counterfactual explanations for multivariate time
+    series by combining a nearest-unlike-neighbour search, a naive
+    subsequence replacement stage, and a multi-objective optimization stage.
+    It supports confidence-based constraints, sparsity control, and optional
+    proximity minimization.
+    """
+    def __init__(self, model_path: None | Path | str = None):
         """
-        Initialize the CONFETTI explainer with the model and data.
-        Args:
-            model_path: Path to the trained model
+        Initialize a CONFETTI explainer.
+
+        Parameters
+        ----------
+        model_path : str or Path or None, default=None
+            Path to a trained model. Models saved with '.keras' or '.h5'
+            are loaded with Keras; files ending in '.joblib' are loaded
+            with joblib. When None, the model must be loaded manually.
         """
         if not isinstance(model_path, (str,Path)):
             raise CONFETTIConfigurationError(
@@ -53,18 +67,22 @@ class CONFETTI:
 
     @property
     def model_path(self) -> None | str:
+        """Return the path to the trained model."""
         return self._model_path
 
     @property
     def model(self):
+        """Return the loaded classification model."""
         return self._model
 
     @property
     def instances_to_explain(self) -> np.ndarray:
+        """Instances for which counterfactuals will be generated."""
         return self._instances_to_explain
 
     @instances_to_explain.setter
     def instances_to_explain(self, instances: np.ndarray) -> None:
+        """Set the instances to be explained."""
         if not isinstance(instances, np.ndarray):
             raise CONFETTIDataTypeError(
                 message=f"instances_to_explain must be a numpy ndarray, but got {type(instances).__name__} instead.",
@@ -75,10 +93,12 @@ class CONFETTI:
 
     @property
     def original_labels(self) -> np.ndarray:
+        """Original labels of the instances to be explained."""
         return self._original_labels
 
     @original_labels.setter
     def original_labels(self, labels: np.ndarray) -> None:
+        """Set the original labels of the instances to be explained."""
         if not isinstance(labels, np.ndarray):
             raise CONFETTIDataTypeError(
                 message=f"original_labels must be a numpy ndarray, but got {type(labels).__name__} instead.",
@@ -89,6 +109,7 @@ class CONFETTI:
 
     @property
     def reference_data(self) -> np.ndarray:
+        """Reference dataset used for finding nearest unlike neighbours."""
         if self._reference_data is None:
             raise CONFETTIConfigurationError(
                 message = "Reference data has not been set. Please set reference data before accessing it.",
@@ -99,6 +120,7 @@ class CONFETTI:
 
     @reference_data.setter
     def reference_data(self, data: np.ndarray) -> None:
+        """Set the reference dataset used for finding nearest unlike neighbours."""
         if not isinstance(data, np.ndarray):
             raise CONFETTIDataTypeError(
                 message=f"reference_data must be a numpy ndarray, but got {type(data).__name__} instead.",
@@ -109,6 +131,7 @@ class CONFETTI:
 
     @property
     def reference_labels(self) -> np.ndarray:
+        """Reference labels corresponding to the reference dataset."""
         if self._reference_labels is None:
             raise CONFETTIConfigurationError(
                 message = "Reference labels have not been set. Please set reference labels before accessing them.",
@@ -119,6 +142,7 @@ class CONFETTI:
 
     @reference_labels.setter
     def reference_labels(self, labels: np.ndarray) -> None:
+        """Set the reference labels corresponding to the reference dataset."""
         if not isinstance(labels, np.ndarray):
             raise CONFETTIDataTypeError(
                 message=f"reference_labels must be a numpy ndarray, but got {type(labels).__name__} instead.",
@@ -129,10 +153,12 @@ class CONFETTI:
 
     @property
     def weights(self) -> None | np.ndarray:
+        """Feature importance weights for the reference dataset."""
         return self._weights
 
     @weights.setter
     def weights(self, weights: None | np.ndarray) -> None:
+        """Set the feature importance weights for the reference dataset."""
         if not isinstance(weights, (np.ndarray, type(None))):
             raise CONFETTIDataTypeError(
                 message=f"weights must be a numpy ndarray or None, but got {type(weights).__name__} instead.",
@@ -151,32 +177,33 @@ class CONFETTI:
         theta: float = 0.51,
     ) -> None | int:
         """
-        Find the Nearest Unlike Neighbour (NUN) of a given instance based on a distance metric
-        and a minimum confidence constraint.
+        Find the nearest unlike neighbour (NUN) for a given instance.
 
-        This method retrieves the closest instances from the reference set that have a different
-        predicted class label than the query instance and whose predicted confidence exceeds
-        a given threshold ``theta``. The search is performed using a k-nearest neighbors approach
-        restricted to unlike-label instances.
+        The method restricts the search to reference instances with a
+        different predicted label and selects the closest one whose
+        predicted confidence meets or exceeds a specified threshold.
 
-        Parameters:
+        Parameters
         ----------
-        ``query`` : np.ndarray
-            The instance to be explained, shaped (timesteps, dimensions).
-        ``predicted_label`` : int
-            The predicted class label of the query instance (e.g., obtained via `np.argmax(model.predict(...))`).
-        ``distance`` : str, default="euclidean"
-            Distance metric to use for k-NN search. Must be compatible with `KNeighborsTimeSeries`.
-        ``n_neighbors`` : int, default=1
-            Number of nearest neighbors to retrieve.
-        ``theta`` : float, default=0.51
-            Minimum predicted probability required for a neighbor to be considered valid.
+        query : ndarray of shape (timesteps, channels)
+            Instance to be explained.
+        predicted_label : int
+            Predicted class label of the query.
+        distance : str, default="euclidean"
+            Distance metric used by KNeighborsTimeSeries.
+        dtw_window : int or None, default=None
+            Sakoe–Chiba radius when using DTW.
+        n_neighbors : int, default=1
+            Number of nearest unlike neighbours to retrieve.
+        theta : float, default=0.51
+            Minimum predicted probability required for a neighbour to
+            be considered valid.
 
-        Returns:
+        Returns
         -------
-        ``nun_index`` : None | int
-            Index of the nearest unlike neighbor in the reference dataset that meets
-            the confidence threshold. Returns None if no such neighbor is found.
+        nun_index : int or None
+            Index of the nearest unlike neighbour in the reference
+            dataset, or None if none meet the confidence threshold.
         """
 
         # Label DataFrame
@@ -243,36 +270,34 @@ class CONFETTI:
         verbose: bool = False,
     ) -> Tuple[Counterfactual, int]:
         """
-        Generate a naive counterfactual by replacing a subsequence of the original instance
-        with the corresponding subsequence from its nearest unlike neighbor (NUN).
+        Generate a naive counterfactual by subsequence replacement.
 
-        This method does not perform any optimization. It directly swaps a fixed-length
-        subsequence in the original instance with the same position from the NUN and checks
-        whether the resulting instance reaches the desired prediction confidence (``theta``).
+        A contiguous subsequence in the original instance is replaced
+        with the same subsequence from the nearest unlike neighbour.
+        The subsequence length is increased until the resulting
+        instance reaches a predicted confidence above a given threshold.
 
-        Parameters:
+        Parameters
         ----------
-        ``instance_index`` : int
-            Index of the original instance in the sample dataset.
-        ``nun_index`` : int
-            Index of the nearest unlike neighbor (NUN) in the reference dataset.
-        ``model`` : object
-            Trained classification model with a `predict_proba` method.
-        ``subarray_length`` : int, default=1
-            Length of the subsequence (temporal window) to replace in the original instance.
-        ``theta`` : float, default=0.51
-            Minimum prediction probability threshold required for the counterfactual to be considered valid.
-        ``verbose`` : bool, default=False
-            If True, prints detailed information during execution.
+        instance_index : int
+            Index of the instance to explain.
+        nun_index : int
+            Index of the nearest unlike neighbour in the reference set.
+        model : object
+            Trained classifier with a predict method.
+        subarray_length : int, default=1
+            Initial length of the subsequence to replace.
+        theta : float, default=0.51
+            Confidence threshold for validity.
+        verbose : bool, default=False
+            If True, print progress information.
 
-        Returns:
+        Returns
         -------
-        ``counterfactual`` : Counterfactual
-            Object containing the counterfactual solution
-            and the predicted class label of the counterfactual.
-
-        ``subarray_length`` : int
-            Length of the subsequence used to generate the counterfactual.
+        counterfactual : Counterfactual
+            The counterfactual instance produced by the naive stage.
+        subarray_length : int
+            Subsequence length used when a valid counterfactual was found.
         """
 
         # Initialize values
@@ -368,59 +393,57 @@ class CONFETTI:
         verbose: bool = False,
     ) -> None | CounterfactualSet:
         """
-        Perform counterfactual optimization for a single instance.
+        Optimize a counterfactual using multi-objective evolutionary search.
 
-        This method generates a counterfactual explanation by optimizing a subset of time steps initially
-        determined by the given subsequence length. It uses the instance to be explained, its nearest
-        unlike neighbor (NUN), and a trained model to guide the optimization. The process balances
-        confidence and sparsity using the weighted parameter alpha, and it ensures that the counterfactual has
-        a predicted probability above the threshold theta for the target class.
+        The search refines a subsequence determined by the naive stage
+        (or the full instance when no naive stage is used). It optimizes
+        for a combination of confidence, sparsity, and optionally
+        proximity. NSGA-III is used to explore the solution space.
 
-        Parameters:
+        Parameters
         ----------
-        ``instance_index`` : int
-            Index of the instance to be explained in the sample set.
-        ``nun_index`` : int
-            Index of the nearest unlike neighbor (NUN) for the instance in the reference set.
-        ``subsequence_length`` : int
-            Initial length of the temporal subsequence to be optimized (i.e., perturbed).
-        ``model`` : object
-            A trained classification model with a `predict` method.
-        ``alpha`` : float, default=0.5
-            Weighting parameter between confidence and sparsity in the objective function.
-            The higher the value, the more weight is given to confidence.
-            It is not used if `optimize_confidence` or `optimize_sparsity` is False.
-        ``theta`` : float, default=0.51
-            Confidence threshold for the target class predicted probability (predicted probability ≥ theta).
-        ``n_partitions`` : int, default=12
-            Number of partitions for the NSGA-III reference directions.
-        ``population_size`` : int, default=100
-            Size of the population used in the evolutionary search algorithm.
-        ``maximum_number_of_generations`` : float, default=100
-            Maximum number of generations used in the evolutionary search algorithm.
-        ``crossover_probability`` : float, default=1.0
-            Probability of applying crossover during reproduction.
-        ``mutation_probability`` : float, default=0.9
-            Probability of applying mutation during reproduction.
-        ``optimize_confidence`` : bool, default=True
-            If True, the optimization will add the objective of achieving a confident prediction for the target class.
-        ``optimize_sparsity`` : bool, default=True
-            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
-        ``optimize_proximity`` : bool, default=False
-            If True, the optimization will add the objective of minimizing the distance to the original instance.
-        ``proximity_distance`` : str, default="euclidean"
-            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
-            Options are all supported metrics by `tslearn.metrics`.
-        ``dtw_window`` : Optional[int], default=None
-            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
-        ``verbose`` : bool, default=False
-            If True, print intermediate progress and diagnostic information.
+        instance_index : int
+            Index of the instance to explain.
+        nun_index : int
+            Index of the nearest unlike neighbour.
+        subsequence_length : int
+            Initial subsequence length to optimize.
+        model : object
+            Trained classifier with a predict method.
+        alpha : float, default=0.5
+            Weight between confidence and sparsity when selecting the
+            final counterfactual.
+        theta : float, default=0.51
+            Minimum predicted probability required for validity.
+        n_partitions : int, default=12
+            Number of partitions used for NSGA-III reference directions.
+        population_size : int, default=100
+            Population size for the evolutionary algorithm.
+        maximum_number_of_generations : int, default=100
+            Maximum number of generations for the search.
+        crossover_probability : float, default=1.0
+            Probability of crossover.
+        mutation_probability : float, default=0.9
+            Probability of mutation.
+        optimize_confidence : bool, default=True
+            Whether to optimize the confidence objective.
+        optimize_sparsity : bool, default=True
+            Whether to optimize the sparsity objective.
+        optimize_proximity : bool, default=True
+            Whether to optimize the proximity objective.
+        proximity_distance : str, default="euclidean"
+            Distance metric used for proximity.
+        dtw_window : int or None, default=None
+            Sakoe–Chiba radius when using DTW.
+        verbose : bool, default=False
+            If True, print progress logs.
 
-        Returns:
+        Returns
         -------
-        CounterfactualSet
-            A CounterfactualSet object containing the original instance, original label, NUN,
-            the best solution according to alpha, and all generated counterfactuals during optimization.
+        counterfactual_set : CounterfactualSet or None
+            A set of counterfactuals for the instance, including the
+            best solution selected by alpha. None if no valid solutions
+            were found.
         """
 
         # Validate that there are at least two objectives to optimize
@@ -572,53 +595,38 @@ class CONFETTI:
         verbose: bool = False,
     ) -> None | CounterfactualSet:
         """
-        Execute one full counterfactual generation cycle for a single test instance.
+        Generate a counterfactual for a single instance.
 
-        This method serves as the base of CONFETTI's parallelization. It runs three main steps:
-        1. Loads the trained model.
-        2. Finds the Nearest Unlike Neighbour (NUN) of the given instance.
-        3. Generates a naive counterfactual by subsequence swapping, followed by an
-           optimized counterfactual using evolutionary search.
+        This method runs the full pipeline for one instance:
+        nearest-unlike-neighbour search, naive stage (if weights are
+        available), and optimization. It is used internally by both
+        sequential and parallel generation.
 
-        Parameters:
+        Parameters
         ----------
-        ``test_instance`` : int
-            Index of the test instance for which counterfactuals will be generated.
-        ``alpha`` : float, default=0.5
-            Trade-off parameter between sparsity and confidence. The higher the value,
-            the more importance is given to achieving a confident prediction.
-        ``theta`` : float, default=0.51
-            Confidence threshold for the target class predicted probability
-            (i.e., predicted probability must be ≥ theta for the counterfactual to be valid).
-        ``n_partitions`` : int, default=12
-            Number of partitions used to generate NSGA-III reference directions.
-        ``population_size`` : int, default=100
-            Size of the population in the genetic algorithm.
-        ``maximum_number_of_generations`` : float, default=100
-            Maximum number of generations allowed in the optimization stage.
-        ``crossover_probability`` : float, default=1.0
-            Probability of applying crossover during reproduction.
-        ``mutation_probability`` : float, default=0.9
-            Probability of applying mutation during reproduction.
-        ``optimize_confidence`` : bool, default=True
-            If True, the optimization will add the objective of achieving a confident prediction for the target class.
-        ``optimize_sparsity`` : bool, default=True
-            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
-        ``optimize_proximity`` : bool, default=False
-            If True, the optimization will add the objective of minimizing the distance to the original instance.
-        ``proximity_distance`` : str, default="euclidean"
-            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
-        ``dtw_window`` : Optional[int], default=None
-            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
-        ``verbose`` : bool, default=False
-            If True, prints detailed progress logs throughout execution.
+        test_instance : int
+            Index of the instance to explain.
+        alpha : float, default=0.5
+            Weight between confidence and sparsity.
+        theta : float, default=0.51
+            Confidence threshold.
+        n_partitions, population_size, maximum_number_of_generations,
+        crossover_probability, mutation_probability :
+            Genetic algorithm parameters.
+        optimize_confidence, optimize_sparsity, optimize_proximity : bool
+            Objective configuration flags.
+        proximity_distance : str, default="euclidean"
+            Distance metric for proximity objective.
+        dtw_window : int or None, default=None
+            DTW radius.
+        verbose : bool, default=False
+            If True, print diagnostic information.
 
-        Returns:
+        Returns
         -------
-        None | CounterfactualSet
-            A CounterfactualSet object containing the original instance, original label,
-            nearest unlike neighbour, the best solution according to alpha, and all generated counterfactuals.
-            Could return None if no NUN is found for the instance or if no counterfactuals are found.
+        counterfactual_set : CounterfactualSet or None
+            The generated counterfactuals, or None if no valid NUN or
+            no counterfactuals were found.
         """
 
         # Load model
@@ -732,65 +740,99 @@ class CONFETTI:
         dtw_window: Optional[int] = None,
         processes: Optional[int] = None,
         save_counterfactuals: bool = False,
-        output_path: Optional[Union[str, Path]] = None,
+        output_path: Optional[str | Path] = None,
         verbose: bool = False) -> None| CounterfactualResults:
         """
-        Generate counterfactual explanations for a set of input instances using CONFETTI.
-        This method can operate in parallel using multiple processes to speed up the generation
-        of counterfactuals for a batch of instances. Each instance is optimized independently using a genetic algorithm
-        configured by the given parameters.
+        Generate counterfactual explanations for multiple instances.
 
-        Parameters:
+        Each instance is processed independently using the CONFETTI
+        pipeline. When processes > 1, parallelization is used; otherwise
+        the generation proceeds sequentially.
+
+        Parameters
         ----------
-        ``instances_to_explain`` : np.ndarray
-            Array of shape (n_instances, timesteps, dimensions) containing the instances to be explained.
-        ``reference_data`` : np.ndarray
-            Array of shape (n_reference, timesteps, dimensions) containing the reference dataset.
-        ``reference_weights`` : Optional[np.ndarray], default=None
-            Array of shape (n_reference, timesteps) containing feature importance weights for the reference data.
-            If None, no weights are used in the naive stage.
-        ``alpha`` : float, default=0.5
-            Trade-off parameter between sparsity and confidence. The higher the value,
-            the more importance is given to achieving a confident prediction.
-        ``theta`` : float, default=0.51
-            Confidence threshold for selecting valid counterfactuals
-            (i.e., predicted class probability must be ≥ theta).
-        ``n_partitions`` : int, default=12
-            Number of partitions for the NSGA-III reference directions.
-        ``population_size`` : int, default=100
-            Size of the population used in the evolutionary search algorithm.
-        ``maximum_number_of_generations`` : int, default=100
-            Maximum number of generations used in the evolutionary search algorithm.
-        ``crossover_probability`` : float, default=1.0
-            Probability of applying crossover during reproduction.
-        ``mutation_probability`` : float, default=0.9
-            Probability of applying mutation during reproduction.
-        ``optimize_confidence`` : bool, default=True
-            If True, the optimization will add the objective of achieving a confident prediction for the target class.
-        ``optimize_sparsity`` : bool, default=True
-            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
-        ``optimize_proximity`` : bool, default=False
-            If True, the optimization will add the objective of minimizing the distance to the original instance.
-        ``proximity_distance`` : str, default="euclidean"
-            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
-        ``dtw_window`` : Optional[int], default=None
-            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
-        ``processes`` : Optional[int], default=None
-            Number of parallel processes to spawn. If None, no parallelization is used.
-        ``save_counterfactuals`` : bool, default=False
-            If True, saves the generated counterfactuals to a CSV file.
-        ``output_path`` : Optional[Union[str, Path]], default=None
-            Path to save the counterfactuals CSV file. If None, saves to the current directory.
-        ``verbose`` : bool, default=False
-            If True, print progress and debug information during execution.
+        instances_to_explain : ndarray of shape (n_instances, timesteps, channels)
+            Instances for which counterfactuals will be generated.
+        reference_data : ndarray of shape (n_reference, timesteps, channels)
+            Reference dataset used to identify nearest unlike neighbours (NUNs).
+        reference_weights : ndarray or None, default=None
+            Feature-importance weights used in the naive stage. If None, the naive stage is skipped.
+        alpha : float, default=0.5
+            Trade-off parameter between confidence and sparsity when selecting
+            the best counterfactual.
+        theta : float, default=0.51
+            Minimum predicted probability required for a counterfactual to be
+            considered valid.
+        n_partitions : int, default=12
+            Number of partitions used to construct the reference directions
+            for the NSGA-III algorithm. Larger values create a denser set of
+            directions and may increase search resolution at the cost of runtime.
+        population_size : int, default=100
+            Number of individuals in the evolutionary population. Higher values
+            improve the search space exploration but increase computation time.
+        maximum_number_of_generations : int, default=100
+            Maximum number of evolutionary generations. Increasing this allows
+            the genetic algorithm to converge more thoroughly at the expense of
+            longer runtimes.
+        crossover_probability : float, default=1.0
+            Probability of applying crossover during reproduction. A value of
+            1.0 means crossover is always applied.
+        mutation_probability : float, default=0.9
+             Probability of flipping each bit in the binary mask used to select
+            perturbed time steps.
+        optimize_confidence : bool, default=True
+            Whether to include confidence maximization as an optimization
+            objective.
+        optimize_sparsity : bool, default=True
+            Whether to include sparsity minimization as an optimization
+            objective.
+        optimize_proximity : bool, default=True
+            Whether to include proximity minimization as an optimization
+            objective.
+        proximity_distance : str, default="euclidean"
+            Distance metric for proximity. Supported metrics include
+            Euclidean and several tslearn-based time-series distances.
+        dtw_window : int or None, default=None
+            Sakoe–Chiba radius for DTW proximity. If None, no warping
+            constraint is applied.
+        processes : int or None, default=None
+            Number of worker processes for parallel execution. If None,
+            counterfactuals are generated sequentially.
+        save_counterfactuals : bool, default=False
+            Whether to save all generated counterfactuals to CSV files.
+        output_path : str or Path or None, default=None
+            Directory where CSV outputs should be written. If None, results
+            are saved to the current working directory.
+        verbose : bool, default=False
+            If True, print detailed progress messages during generation.
 
-        Returns:
+        Returns
         -------
-        ``counterfactual_results`` : CounterfactualResults
-            A CounterfactualResults object containing all generated counterfactual sets
-            for the input instances.
-            Can return None if no counterfactuals were generated.
+        counterfactual_results : CounterfactualResults or None
+            All counterfactual sets produced for the batch.
 
+        Note
+        -----
+        Distance metrics for proximity optimization are handled through the
+        ``tslearn.metrics`` module when ``optimize_proximity=True``.
+
+        CONFETTI supports several time-series distances beyond Euclidean, including
+        Dynamic Time Warping (DTW), Soft-DTW, CTW, and GAK. These metrics are accessed
+        internally via ``tslearn.metrics`` through functions such as
+        ``cdist_dtw``, ``cdist_ctw``, ``cdist_soft_dtw`` and ``cdist_gak``.
+
+        - If a tslearn-based distance is selected (e.g., ``proximity_distance="dtw"``),
+          the proximity objective computes pairwise distances between each generated
+          counterfactual and the original instance using the corresponding tslearn
+          cost matrix.
+        - DTW can optionally use a Sakoe–Chiba band via ``dtw_window`` for faster and
+          more constrained alignment.
+        - ``tslearn`` is **only required** when a non-Euclidean proximity metric is
+          requested. If tslearn is not installed and such a metric is selected,
+          CONFETTI raises a ``CONFETTIConfigurationError`` describing the missing
+          dependency.
+
+        Euclidean proximity does not require tslearn and is always available.
         """
 
         if processes is not None:
@@ -875,52 +917,20 @@ class CONFETTI:
         verbose: bool = False,
     ) -> None | CounterfactualResults:
         """
-        Generate counterfactual explanations in parallel for a set of input instances using CONFETTI.
+        Generate counterfactuals in parallel.
 
-        This method distributes the generation process across multiple processes to speed up
-        the computation of counterfactuals for a batch of instances. Each instance is optimized
-        independently using a genetic algorithm configured by the given parameters.
+        Each instance is processed through the full CONFETTI pipeline
+        in an independent process. Results are aggregated into a single
+        CounterfactualResults object.
 
-        Parameters:
+        Parameters
         ----------
-        ``alpha`` : float, default=0.5
-            Trade-off parameter between sparsity and confidence. The higher the value,
-            the more importance is given to achieving a confident prediction.
-            It is not used when `optimize_confidence` or `optimize_sparsity` is False.
-        ``theta`` : float, default=0.51
-            Confidence threshold for selecting valid counterfactuals
-            (i.e., predicted class probability must be ≥ theta).
-        ``n_partitions`` : int, default=12
-            Number of partitions for the NSGA-III reference directions.
-        ``population_size`` : int, default=100
-            Size of the population used in the evolutionary search algorithm.
-        ``maximum_number_of_generations`` : int, default=100
-            Maximum number of generations used in the evolutionary search algorithm.
-        ``crossover_probability`` : float, default=1.0
-            Probability of applying crossover during reproduction.
-        ``mutation_probability`` : float, default=0.9
-            Probability of applying mutation during reproduction.
-        ``optimize_confidence`` : bool, default=True
-            If True, the optimization will add the objective of achieving a confident prediction for the target class.
-        ``optimize_sparsity`` : bool, default=True
-            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
-        ``optimize_proximity`` : bool, default=False
-            If True, the optimization will add the objective of minimizing the distance to the original instance.
-        ``proximity_distance`` : str, default="euclidean"
-            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
-        ``dtw_window`` : Optional[int], default=None
-            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
-        ``processes`` : int, default=8
-            Number of parallel processes to spawn.
-        ``verbose`` : bool, default=False
-            If True, print progress and debug information during execution.
+        (same as generate_counterfactuals, except processes is required)
 
-        Returns:
+        Returns
         -------
-        ``counterfactual_results`` : CounterfactualResults
-            A CounterfactualResults object containing all generated counterfactual sets
-            for the input instances.
-            Can return None if no counterfactuals were found.
+        counterfactual_results : CounterfactualResults or None
+            All counterfactual sets from parallel execution.
         """
 
         pool = Pool(processes=processes)
@@ -979,52 +989,20 @@ class CONFETTI:
     ) -> None | CounterfactualResults:
 
         """
-        Generate counterfactual explanations sequentially for a set of input instances using CONFETTI.
+        Generate counterfactuals sequentially.
 
-        This function iterates over each instance in the input and generates counterfactual explanations
-        by first applying a naive subsequence swap, followed by an optimization step based on a
-        multi-objective genetic algorithm. Unlike its parallel counterpart, this version processes
-        instances one at a time on a single process.
+        This version processes instances one-by-one without spawning
+        additional processes. It is the fallback when parallelization
+        is not requested.
 
-        Parameters:
+        Parameters
         ----------
-        ``instances_to_explain`` : np.ndarray
-            A NumPy array of instances for which counterfactuals should be generated.
-        ``theta`` : float, default=0.51
-            Confidence threshold for selecting valid counterfactuals
-            (i.e., predicted class probability must be ≥ theta).
-        ``alpha`` : float, default=0.5
-            Trade-off parameter between sparsity and confidence. The higher the value,
-            the more importance is given to achieving a confident prediction.
-        ``n_partitions`` : int, default=12
-            Number of partitions used to generate NSGA-III reference directions.
-        ``population_size`` : int, default=100
-            Size of the population in the genetic algorithm.
-        ``maximum_number_of_generations`` : int, default=100
-            Maximum number of generations for the optimization algorithm.
-        ``crossover_probability`` : float, default=1.0
-            Probability of applying crossover during reproduction.
-        ``mutation_probability`` : float, default=0.9
-            Probability of applying mutation during reproduction.
-        ``optimize_confidence`` : bool, default=True
-            If True, the optimization will add the objective of achieving a confident prediction for the target class.
-        ``optimize_sparsity`` : bool, default=True
-            If True, the optimization will add the objective of minimizing the number of perturbed time steps.
-        ``optimize_proximity`` : bool, default=False
-            If True, the optimization will add the objective of minimizing the distance to the original instance.
-        ``proximity_distance`` : str, default="euclidean"
-            Distance metric to use for proximity optimization. Only used if `optimize_proximity` is True.
-        ``dtw_window`` : Optional[int], default=None
-            Sakoe–Chiba band radius for DTW. If None, no band constraint is applied.
-        ``verbose`` : bool, default=False
-            If True, print progress and debug information during execution.
+        (subset of generate_counterfactuals parameters)
 
-        Returns:
+        Returns
         -------
-        ``counterfactual_results`` : CounterfactualResults
-            A CounterfactualResults object containing all generated counterfactual sets
-            for the input instances.
-            Can return None if no counterfactuals were found.
+        counterfactual_results : CounterfactualResults or None
+            All counterfactual sets generated sequentially.
         """
         counterfactual_sets: List[CounterfactualSet] = []
 
@@ -1179,7 +1157,7 @@ class CONFETTI:
         best : Counterfactual
             The counterfactual solution with the highest weighted score.
 
-        Notes
+        Note
         -----
         Confidence is maximized while sparsity is minimized. However, in Pymoo's implementation, to maximize
         an objective you need to set it to negative. (e.g. f1 = -confidence, f2 = sparsity). Thus, confidence in

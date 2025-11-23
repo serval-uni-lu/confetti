@@ -4,13 +4,31 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 def visualize_cam(weights: np.ndarray, instance_index: int) -> None:
-    """
-    Visualize the Class Activation Map (CAM) for a specific instance using pure matplotlib,
-    with a clean white-background design.
+    """Visualize the Class Activation Map (CAM) for a single instance.
 
-    Parameters:
-        weights (np.ndarray): CAM weights for multiple instances.
-        instance_index (int): Index of the instance to visualize.
+    This function produces a simple matplotlib plot showing the normalized
+    class activation map for a chosen instance. The weights for all instances
+    are first min–max normalized across the dataset, and the selected CAM
+    is displayed over time with a clean white-background design.
+
+    Parameters
+    ----------
+    weights : ndarray of shape (n_instances, timesteps)
+        The CAM weights computed for each instance.
+    instance_index : int
+        Index of the instance whose CAM should be visualized.
+
+    Raises
+    ------
+    IndexError
+        If ``instance_index`` is out of range for ``weights``.
+    ValueError
+        If ``weights`` is not a 2D array.
+
+    Note
+    -----
+    The CAM values are normalized using ``MinMaxScaler`` prior to
+    visualization to enable clearer comparison across instances.
     """
 
     # Normalize weights
