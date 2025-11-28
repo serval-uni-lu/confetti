@@ -1,4 +1,17 @@
+<!-- Build Status -->
+  <a href="https://github.com/serval-uni-lu/confetti/actions">
+    <img src="https://img.shields.io/github/actions/workflow/status/serval-uni-lu/confetti/ci.yaml?label=CI&logo=github" alt="CI Status">
+  </a>
 
+<!-- Documentation -->
+  <a href="https://confetti-ts.readthedocs.io/en/latest/">
+    <img src="https://img.shields.io/readthedocs/confetti-ts?logo=readthedocs" alt="Documentation Status">
+  </a>
+
+<!-- License -->
+  <a href="https://github.com/serval-uni-lu/confetti/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/serval-uni-lu/confetti?color=4E65FF" alt="License">
+  </a>
 
 <p align="center">
   <img src="docs/artwork/confetti-logo.svg" width="600"  alt="CONFETTI logo">
@@ -109,7 +122,10 @@ The alignment between CAM activation and the altered subsequence shows how CONFE
 
 ---
 ## 📚Documentation
-Documentation is currently in preparation and will be available soon.
+
+The full documentation, including usage guides, API reference, and examples, is available at:
+
+👉 **https://confetti-ts.readthedocs.io/en/latest/**
 
 ---
 ## 📄License
@@ -120,6 +136,9 @@ CONFETTI is released under the [MIT License](LICENSE).
 ## 📝 Citing CONFETTI
 A formal citation entry will appear here once the paper is officially published.
 
+To **replicate the experiments described in the paper**, use the **`paper` branch** of this
+repository. It contains the experiment scripts, model configurations, and dataset handling
+used in the publication.
 
 
 
