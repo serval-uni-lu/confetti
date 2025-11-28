@@ -22,7 +22,7 @@ classifiers = [
 
 
 dependencies = [
-    "numpy>=1.26",
+    "numpy>=2.3",
     "pandas>=2.0",
     "joblib>=1.2",
     "keras>=3.12.0",
