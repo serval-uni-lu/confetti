@@ -1,7 +1,5 @@
 # Exclude a variety of commonly ignored directories.
 exclude = [
-    "test_weight_filtering.py",
-    "paper",
     ".bzr",
     ".direnv",
     ".eggs",
@@ -28,6 +26,7 @@ exclude = [
     "node_modules",
     "site-packages",
     "venv",
+    "tests",
 ]
 
 line-length = 120
