@@ -113,11 +113,12 @@ Documentation is currently in preparation and will be available soon.
 
 ---
 ## 📄License
-To be added before release.
+
+CONFETTI is released under the [MIT License](LICENSE). 
 
 ---
 ## 📝 Citing CONFETTI
-A formal citation entry will appear here once the paper is officially released.
+A formal citation entry will appear here once the paper is officially published.
 
 
 
