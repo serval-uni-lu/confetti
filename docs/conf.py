@@ -41,6 +41,7 @@ html_title = "CONFETTI Documentation"
 html_short_title = "CONFETTI"
 html_theme = "furo"
 html_static_path = ["_static"]
+html_favicon = "_static/confetti-isotype.svg"
 pygments_style = "friendly"
 html_theme_options = {
     "source_repository": "https://github.com/serval-uni-lu/confetti/",
