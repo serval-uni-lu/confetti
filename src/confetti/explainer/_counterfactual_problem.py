@@ -149,7 +149,7 @@ class CounterfactualProblem(Problem):
         if self.optimize_proximity:
             objective_values.append(f3)
 
-        out["F"] = np.row_stack(objective_values).T
+        out["F"] = np.vstack(objective_values).T
 
     def _proximity(
         self,

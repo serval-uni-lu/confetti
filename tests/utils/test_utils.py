@@ -52,13 +52,11 @@ def test_convert_string_to_array_valid(data_string, timesteps, channels, expecte
 @pytest.mark.parametrize(
     "data_string,timesteps,channels,found",
     [
-        ("1 2 3", 2, 2, 3),
-        ("", 1, 1, 0),
-        ("a b c", 1, 3, 0),
-    ],
+        ("1 2 3", 2, 2, 3),   # too few values
+        ("", 1, 1, 0),        # empty -> size 0
+    ]
 )
-def test_convert_string_to_array_error_metadata(data_string, timesteps, channels, found) -> None:
-    """Error must contain correct message and missing metadata fields remain None."""
+def test_convert_string_to_array_size_mismatch(data_string, timesteps, channels, found):
     with pytest.raises(CONFETTIConfigurationError) as exc_info:
         convert_string_to_array(data_string, timesteps, channels)
 
@@ -67,6 +65,16 @@ def test_convert_string_to_array_error_metadata(data_string, timesteps, channels
     assert err.message.startswith("Data does not match expected size")
     assert f"({timesteps}, {channels})" in err.message
     assert f"{found}" in err.message
+
+def test_convert_string_to_array_parse_error():
+    bad_string = "a b c"
+
+    with pytest.raises(CONFETTIConfigurationError) as exc_info:
+        convert_string_to_array(bad_string, 1, 3)
+
+    err = exc_info.value
+    assert err.message.startswith("Failed to parse numeric values")
+    assert "a b c" in err.message
 
 
 
