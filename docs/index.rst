@@ -1,4 +1,14 @@
-CONFETTI: Counterfactual Explanations for Multivariate Time Series
+.. image:: _static/confetti-logo.svg
+   :alt: CONFETTI logo
+   :align: center
+   :class: only-light
+
+.. image:: _static/confetti-white.svg
+   :alt: CONFETTI logo
+   :align: center
+   :class: only-dark
+
+Counterfactual Explanations for Multivariate Time Series
 ==================================================================
 
 

@@ -46,6 +46,9 @@ html_theme_options = {
     "source_repository": "https://github.com/serval-uni-lu/confetti/",
     "source_branch": "main",
     "source_directory": "docs/",
+    "light_logo": "confetti-logo.svg",
+    "dark_logo": "confetti-white.svg",
+    "sidebar_hide_name": True,
     "light_css_variables": {
         "color-brand-primary": "#30B08E",
         "color-brand-content": "#1A3A3A",

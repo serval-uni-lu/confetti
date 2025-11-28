@@ -1,5 +1,5 @@
 [project]
-name = "confetti"
+name = "confetti-ts"
 version = "0.1.0"
 description = "A multi-objective counterfactual explanation method for deep learning based multivariate time series."
 readme = "README.md"
@@ -10,6 +10,17 @@ authors = [
   {name = "Alan Paredes Cetina", email = "alan.paredes@uni.lu"},
   {name = "Raoni Lourenco", email = "raoni.lourenco@uni.lu"},
 ]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
 
 dependencies = [
     "numpy>=1.26",
@@ -21,6 +32,12 @@ dependencies = [
     "pymoo>=0.6.1",
     "tslearn>=0.6",
 ]
+
+[project.urls]
+Homepage = "https://github.com/serval-uni-lu/confetti"
+Documentation = "https://serval-uni-lu.github.io/confetti"
+Repository = "https://github.com/serval-uni-lu/confetti"
+Issues = "https://github.com/serval-uni-lu/confetti/issues"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
