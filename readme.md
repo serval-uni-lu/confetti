@@ -42,22 +42,27 @@ CONFETTI is model-agnostic and works with **any deep learning classifier**, diff
 ---
 ## 🚀 Installation
 
+### PyPI Installation
+```bash
+pip install confetti-ts
+```
+
 ### Development Installation
 ```bash
+git clone https://github.com/serval-uni-lu/confetti.git
+cd confetti
+
 uv venv
 source .venv/bin/activate
 uv pip install -e .
 ```
 
-### PyPI (once released)
-```bash
-pip install confetti-ts
-```
 Requirements:
 
 * Python 3.12+
 * NumPy, pandas
 * Keras 3.x
+* TensorFlow 
 * Pymoo
 * tslearn
 
