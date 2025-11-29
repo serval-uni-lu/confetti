@@ -34,7 +34,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/serval-uni-lu/confetti"
-Documentation = "https://serval-uni-lu.github.io/confetti"
+Documentation = "https://confetti-ts.readthedocs.io/en/latest/index.html"
 Repository = "https://github.com/serval-uni-lu/confetti"
 Issues = "https://github.com/serval-uni-lu/confetti/issues"
 
