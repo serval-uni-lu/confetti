@@ -1,7 +1,7 @@
 [project]
 name = "confetti-ts"
 version = "0.1.1"
-description = "A multi-objective counterfactual explanation method for deep learning based multivariate time series."
+description = "A multi-objective counterfactual explanation method for deep learning based multivariate time series classifiers."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
