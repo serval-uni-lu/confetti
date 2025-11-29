@@ -13,9 +13,8 @@
     <img src="https://img.shields.io/github/license/serval-uni-lu/confetti?color=4E65FF" alt="License">
   </a>
 
-<p align="center">
-  <img src="docs/artwork/confetti-logo.svg" width="600"  alt="CONFETTI logo">
-</p>
+
+![CONFETTI Logo](https://raw.githubusercontent.com/serval-uni-lu/confetti/main/docs/artwork/confetti-logo.png)
 
 ---
 # Counterfactual Explanations for Multivariate Time Series
