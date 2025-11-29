@@ -1,31 +1,33 @@
+<p align="center">
 <!-- PyPi Version -->
-<a href="https://pypi.org/project/confetti-ts/">
-  <img src="https://img.shields.io/pypi/v/confetti-ts?logo=pypi&logoColor=white" alt="PyPI Version">
-</a>
-
-<!-- Python Versions -->
-<a href="https://pypi.org/project/confetti-ts/">
-  <img src="https://img.shields.io/pypi/pyversions/confetti-ts?logo=python&logoColor=white" alt="Python Versions">
-</a>
-
-<!-- Wheel -->
-<img src="https://img.shields.io/pypi/wheel/confetti-ts" alt="Wheel">
-
-<!-- Build Status -->
+  <a href="https://pypi.org/project/confetti-ts/">
+    <img src="https://img.shields.io/pypi/v/confetti-ts?logo=pypi&logoColor=white" alt="PyPI Version">
+  </a>
+  
+  <!-- Python Versions -->
+  <a href="https://pypi.org/project/confetti-ts/">
+    <img src="https://img.shields.io/pypi/pyversions/confetti-ts?logo=python&logoColor=white" alt="Python Versions">
+  </a>
+  
+  <!-- Wheel -->
+  <img src="https://img.shields.io/pypi/wheel/confetti-ts" alt="Wheel">
+  
+  <!-- Build Status -->
   <a href="https://github.com/serval-uni-lu/confetti/actions">
     <img src="https://img.shields.io/github/actions/workflow/status/serval-uni-lu/confetti/ci.yaml?label=CI&logo=github" alt="CI Status">
   </a>
-
-<!-- Documentation -->
+  
+  <!-- Documentation -->
   <a href="https://confetti-ts.readthedocs.io/en/latest/">
     <img src="https://img.shields.io/readthedocs/confetti-ts?logo=readthedocs" alt="Documentation Status">
   </a>
-
-<!-- License -->
+  
+  <!-- License -->
   <a href="https://github.com/serval-uni-lu/confetti/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/serval-uni-lu/confetti?color=4E65FF" alt="License">
   </a>
 
+</p>
 
 ![CONFETTI Logo](https://raw.githubusercontent.com/serval-uni-lu/confetti/main/docs/artwork/confetti-logo.png)
 
