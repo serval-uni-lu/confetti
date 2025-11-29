@@ -114,7 +114,8 @@ plot_counterfactual(
     title="Counterfactual Explanation"
 )
 ```
-<p> <img src="docs/artwork/counterfactual_example.png" alt="Counterfactual Example" width="650"/> </p>
+
+![Counterfactual Example](https://raw.githubusercontent.com/serval-uni-lu/confetti/main/docs/artwork/counterfactual_example.png)
 
 In the visualization:
 
