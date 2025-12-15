@@ -159,7 +159,7 @@ plot_method_comparison_with_cam(
     counterfactuals_dict,
     nun_weight,
     dimension_idx=3,
-    title="Counterfactual Comparison for a Single Dimension (4th Dimension)",
+    title="Counterfactual Comparison for a Single Dimension",
 )
 
 

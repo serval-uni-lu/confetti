@@ -279,17 +279,25 @@ def boxplot_all_tradeoffs_by_model(
         else:
             ax.set_ylim(0, 60)
 
-        ax.set_title(title, fontsize=18)
-        ax.set_xlabel(xlabel, fontsize=16)
-        ax.set_ylabel(ylabel, fontsize=16)
-        ax.tick_params(axis="both", labelsize=14)
+        ax.set_title(title, fontsize=30)
+        ax.set_xlabel(xlabel, fontsize=30)
+        ax.set_ylabel(ylabel, fontsize=30)
+        ax.tick_params(axis="both", labelsize=28)
         ax.grid(True, linestyle="--", alpha=0.9)
-        ax.legend(title="Model", loc="best", fontsize=12, title_fontsize=12)
+        ax.legend(title="Model",
+                  loc="best",
+                  fontsize=28,
+                  title_fontsize=30,
+                  labelspacing=0.1,  # vertical space between labels
+                  handletextpad=0.2,  # horizontal gap between handle and text
+                  borderpad=0.2,  # padding inside the legend box
+                  borderaxespad=0.2
+                  )
 
     plt.tight_layout()
 
-    filename = "tradeoffs_by_model.pdf"
-    plt.savefig(filename, format="pdf", bbox_inches="tight")
+    filename = "tradeoffs.pdf"
+    plt.savefig(filename, format="pdf", bbox_inches="tight", dpi=600)
     plt.show()
 
 
@@ -587,10 +595,10 @@ def plot_method_comparison_with_cam(
                 )
 
     # Fonts and layout for single-column figure
-    ax1.set_title(title or f"Dimension {dimension_idx + 1}", fontsize=16)
-    ax1.set_ylabel("Value", fontsize=14)
-    ax1.legend(loc="upper left", fontsize=12)  # Changed to upper left
-    ax1.tick_params(axis="both", labelsize=13)
+    ax1.set_title(title or f"Dimension {dimension_idx + 1}", fontsize=20)
+    ax1.set_ylabel("Value", fontsize=20, labelpad=5)
+    ax1.legend(loc="upper left", fontsize=16)  # Changed to upper left
+    ax1.tick_params(axis="both", labelsize=18)
     ax1.grid(True, linewidth=0.5)
 
     # Normalize CAM
@@ -602,13 +610,14 @@ def plot_method_comparison_with_cam(
         extent=[0, len(timesteps), 0, 1],
     )
     ax2.set_yticks([0.5])
-    ax2.set_yticklabels(["CAM"], fontsize=13, rotation="vertical")
-    ax2.set_xlabel("Time", fontsize=14)
-    ax2.tick_params(axis="x", labelsize=13)
+    ax2.set_yticklabels(["CAM"], fontsize=20, rotation="vertical")
+    ax2.set_xlabel("Time", fontsize=20)
+    ax2.tick_params(axis="x", labelsize=18)
     ax2.grid(False)
 
     plt.tight_layout()
-    plt.savefig("methods.pdf", format="pdf", bbox_inches="tight")
+    plt.subplots_adjust(left=0.14)
+    plt.savefig("methods.pdf", format="pdf", bbox_inches="tight", dpi=300)
     plt.show()
 
 
