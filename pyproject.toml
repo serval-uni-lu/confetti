@@ -29,7 +29,7 @@ dependencies = [
     "tensorflow>=2.20.0",
     "scikit-learn>=1.7.2",
     "pymoo>=0.6.1",
-    "tslearn>=0.6",
+    "tslearn>=0.7.0",
 ]
 
 [project.urls]
