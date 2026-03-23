@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import joblib
 
-import keras
+from confetti.utils._compat import require_keras, require_torch
 from tslearn.neighbors import KNeighborsTimeSeries
 
 from pymoo.algorithms.moo.nsga3 import NSGA3
@@ -24,6 +24,33 @@ from pymoo.termination import get_termination
 
 from multiprocessing import Pool
 from functools import partial
+
+
+def _load_model(model_path: str):
+    """Load a model from *model_path*, dispatching on file extension.
+
+    Supported formats:
+    * ``.joblib`` — loaded with :mod:`joblib`
+    * ``.keras`` — loaded with :func:`keras.models.load_model` (requires keras)
+    * ``.pt`` / ``.pth`` — loaded with :func:`torch.load` and wrapped in
+      :class:`~confetti.adapters.TorchModelAdapter` (requires torch)
+    """
+    if model_path.endswith(".joblib"):
+        return joblib.load(model_path)
+    elif model_path.endswith(".keras"):
+        keras = require_keras("loading a .keras model")
+        return keras.models.load_model(model_path)
+    elif model_path.endswith((".pt", ".pth")):
+        torch = require_torch("loading a .pt/.pth model")
+        from confetti.adapters import TorchModelAdapter
+
+        raw_model = torch.load(model_path, weights_only=False)
+        return TorchModelAdapter(raw_model)
+    else:
+        raise CONFETTIConfigurationError(
+            message=f"Unsupported model file extension: {model_path}",
+            hint="Supported extensions: .keras, .joblib, .pt, .pth",
+        )
 
 
 class CONFETTI:
@@ -53,15 +80,12 @@ class CONFETTI:
                 message="model_path must be a valid string or Path to the trained model.",
                 config={"received_type": type(model_path).__name__},
                 param="model_path",
-                hint="Pass a valid file path ending in `.keras` or `.joblib`.",
+                hint="Pass a valid file path ending in `.keras`, `.joblib`, `.pt`, or `.pth`.",
                 source="ConfettiExplainer.__init__",
             )
         else:
             self._model_path = model_path
-            if str(model_path).endswith(".joblib"):
-                self._model = joblib.load(str(model_path))
-            else:
-                self._model = keras.models.load_model(model_path)
+            self._model = _load_model(str(model_path))
 
         self._instances_to_explain: Optional[np.ndarray] = None
         self._original_labels: Optional[np.ndarray] = None
@@ -608,10 +632,7 @@ class CONFETTI:
         """
 
         # Load model
-        if self.model_path.endswith(".joblib"):
-            model = joblib.load(self.model_path)
-        else:
-            model = keras.models.load_model(self.model_path)
+        model = _load_model(self.model_path)
 
         nun_index = self._nearest_unlike_neighbour(
             query=self.instances_to_explain[test_instance],

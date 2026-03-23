@@ -1,7 +1,8 @@
-import keras
-from keras import layers
 import numpy as np
 from pathlib import Path
+
+from confetti.utils._compat import require_keras
+
 
 class ToyFCN:
 
@@ -18,6 +19,9 @@ class ToyFCN:
         return self.model_path / "toy_fcn.keras"
 
     def _build_model(self):
+        keras = require_keras("building ToyFCN model")
+        from keras import layers
+
         inputs = keras.layers.Input(shape=self.input_shape)
 
         # Conv block 1

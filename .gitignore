@@ -181,3 +181,8 @@ cython_debug/
 *.code-workspace
 
 demo.py
+
+#Agents
+agents.md
+claude.md
+.claude

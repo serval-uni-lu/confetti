@@ -1,10 +1,13 @@
 import pytest
-import keras
 import numpy as np
 
-from tests.toy_fcn import ToyFCN
+from confetti.utils._compat import get_keras
 from confetti.explainer.explainer import CONFETTI
 from confetti.attribution import cam
+
+requires_keras = pytest.mark.skipif(
+    get_keras() is None, reason="Keras not installed"
+)
 
 
 @pytest.fixture(scope="session")
@@ -59,6 +62,9 @@ def toy_dataset():
 
 @pytest.fixture(scope="session")
 def toy_model_path(tmp_path_factory, toy_dataset):
+    keras = pytest.importorskip("keras")
+    from tests.toy_fcn import ToyFCN
+
     X_train, y_train, X_test, y_test = toy_dataset
 
     tmp_dir = tmp_path_factory.mktemp("toy_model_dir")
@@ -76,6 +82,7 @@ def cam_weights(toy_model_path, toy_dataset):
     """
     CAM Weights from Training Sample
     """
+    keras = pytest.importorskip("keras")
 
     X_train, y_train, X_test, y_test = toy_dataset
 
@@ -134,6 +141,7 @@ def reference_data(toy_dataset):
 
 @pytest.fixture()
 def reference_labels(reference_data, toy_model_path):
+    keras = pytest.importorskip("keras")
     model = keras.models.load_model(toy_model_path)
     return np.argmax(model.predict(reference_data), axis=1)
 
