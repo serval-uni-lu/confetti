@@ -154,7 +154,19 @@ CONFETTI is released under the [MIT License](LICENSE).
 
 ---
 ## 📝 Citing CONFETTI
-A formal citation entry will appear here once the paper is officially published.
+If you use CONFETTI in your research, please consider citing the following paper:
+
+```
+@inproceedings{cetina2026counterfactual,
+  title={Counterfactual Explainable AI (XAI) Method for Deep Learning-Based Multivariate Time Series Classification},
+  author={Cetina, Alan Gabriel Paredes and Benguessoum, Kaouther and Lourenco, Raoni and Kubler, Sylvain},
+  booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume={40},
+  number={21},
+  pages={17393--17400},
+  year={2026}
+}
+```
 
 To **replicate the experiments described in the paper**, use the **`paper` branch** of this
 repository. It contains the experiment scripts, model configurations, and dataset handling
