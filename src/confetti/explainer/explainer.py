@@ -18,8 +18,8 @@ from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.optimize import minimize
 from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.operators.crossover.pntx import TwoPointCrossover
-from pymoo.operators.mutation.bitflip import BitflipMutation
-from pymoo.operators.sampling.rnd import BinaryRandomSampling
+from confetti.algorithm.mutation import BitflipMutation
+from confetti.algorithm.sampling import BinaryRandomSampling
 from pymoo.termination import get_termination
 
 from multiprocessing import Pool
@@ -523,7 +523,7 @@ class CONFETTI:
 
             result = minimize(problem, algorithm, termination, seed=1, verbose=False)
 
-            if result.X is None:
+            if result.X is None: 
                 low = window + 1
             else:
                 objective_values.append(result.F)
