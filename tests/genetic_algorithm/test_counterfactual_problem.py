@@ -323,11 +323,11 @@ def test_dtype_agnostic_mask(problem_factory):
 
 
 # ---------------------------------------------------------------------------
-# tslearn-gated proximity tests
+# Proximity tests (using confetti.distances)
 # ---------------------------------------------------------------------------
 
-def test_dtw_proximity_matches_tslearn(problem_factory, original_instance, nun_instance):
-    tslearn_metrics = pytest.importorskip("tslearn.metrics")
+def test_dtw_proximity(problem_factory, original_instance, nun_instance):
+    from confetti.distances import cdist_dtw
 
     start, L = 2, 3
     p = problem_factory(
@@ -343,13 +343,13 @@ def test_dtw_proximity_matches_tslearn(problem_factory, original_instance, nun_i
 
     mask_reshaped = x.reshape(3, L, 2)
     cf = _build_counterfactual(original_instance, nun_instance, mask_reshaped, start, L)
-    expected = tslearn_metrics.cdist_dtw(cf, original_instance[None, :, :]).ravel()
+    expected = cdist_dtw(cf, original_instance[None, :, :]).ravel()
     # proximity column is last
     np.testing.assert_allclose(out["F"][:, -1], expected, atol=1e-6)
 
 
 def test_dtw_with_sakoe_chiba_window(problem_factory, original_instance, nun_instance):
-    tslearn_metrics = pytest.importorskip("tslearn.metrics")
+    from confetti.distances import cdist_dtw
 
     start, L = 1, 4
     p = problem_factory(
@@ -366,14 +366,13 @@ def test_dtw_with_sakoe_chiba_window(problem_factory, original_instance, nun_ins
 
     mask_reshaped = x.reshape(2, L, 2)
     cf = _build_counterfactual(original_instance, nun_instance, mask_reshaped, start, L)
-    expected = tslearn_metrics.cdist_dtw(
+    expected = cdist_dtw(
         cf, original_instance[None, :, :], global_constraint="sakoe_chiba", sakoe_chiba_radius=2,
     ).ravel()
     np.testing.assert_allclose(out["F"][:, -1], expected, atol=1e-6)
 
 
 def test_unsupported_metric_raises_configuration_error(problem_factory):
-    pytest.importorskip("tslearn.metrics")
     p = problem_factory(proximity_distance="not-a-real-metric", optimize_proximity=True)
     x = np.zeros((1, p.n_var), dtype=bool)
     out = {}
@@ -409,8 +408,8 @@ def test_subsequence_length_one(problem_factory):
     np.testing.assert_allclose(out["F"][:, 1], expected_sparsity)
 
 
-def test_ctw_proximity_matches_tslearn(problem_factory, original_instance, nun_instance):
-    tslearn_metrics = pytest.importorskip("tslearn.metrics")
+def test_ctw_proximity(problem_factory, original_instance, nun_instance):
+    from confetti.distances import cdist_ctw
 
     start, L = 2, 3
     p = problem_factory(
@@ -426,12 +425,12 @@ def test_ctw_proximity_matches_tslearn(problem_factory, original_instance, nun_i
 
     mask_reshaped = x.reshape(3, L, 2)
     cf = _build_counterfactual(original_instance, nun_instance, mask_reshaped, start, L)
-    expected = tslearn_metrics.cdist_ctw(cf, original_instance[None, :, :]).ravel()
+    expected = cdist_ctw(cf, original_instance[None, :, :]).ravel()
     np.testing.assert_allclose(out["F"][:, -1], expected, atol=1e-6)
 
 
-def test_softdtw_proximity_matches_tslearn(problem_factory, original_instance, nun_instance):
-    tslearn_metrics = pytest.importorskip("tslearn.metrics")
+def test_softdtw_proximity(problem_factory, original_instance, nun_instance):
+    from confetti.distances import cdist_soft_dtw
 
     start, L = 2, 3
     p = problem_factory(
@@ -447,12 +446,12 @@ def test_softdtw_proximity_matches_tslearn(problem_factory, original_instance, n
 
     mask_reshaped = x.reshape(3, L, 2)
     cf = _build_counterfactual(original_instance, nun_instance, mask_reshaped, start, L)
-    expected = tslearn_metrics.cdist_soft_dtw(cf, original_instance[None, :, :]).ravel()
+    expected = cdist_soft_dtw(cf, original_instance[None, :, :]).ravel()
     np.testing.assert_allclose(out["F"][:, -1], expected, atol=1e-4)
 
 
-def test_gak_proximity_matches_tslearn(problem_factory, original_instance, nun_instance):
-    tslearn_metrics = pytest.importorskip("tslearn.metrics")
+def test_gak_proximity(problem_factory, original_instance, nun_instance):
+    from confetti.distances import cdist_gak
 
     start, L = 2, 3
     p = problem_factory(
@@ -468,5 +467,5 @@ def test_gak_proximity_matches_tslearn(problem_factory, original_instance, nun_i
 
     mask_reshaped = x.reshape(3, L, 2)
     cf = _build_counterfactual(original_instance, nun_instance, mask_reshaped, start, L)
-    expected = tslearn_metrics.cdist_gak(cf, original_instance[None, :, :]).ravel()
+    expected = cdist_gak(cf, original_instance[None, :, :]).ravel()
     np.testing.assert_allclose(out["F"][:, -1], expected, atol=1e-4)

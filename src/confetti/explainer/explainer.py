@@ -12,7 +12,7 @@ import pandas as pd
 import joblib
 
 from confetti.utils._compat import require_keras, require_torch
-from tslearn.neighbors import KNeighborsTimeSeries
+from confetti.distances import TimeSeriesKNN
 
 from confetti.algorithm import NSGA3, das_dennis, minimize
 from confetti.algorithm.crossover import TwoPointCrossover
@@ -255,7 +255,7 @@ class CONFETTI:
                     "global_constraint": "sakoe_chiba",
                     "sakoe_chiba_radius": dtw_window,
                 }
-        knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance, metric_params=metric_params)
+        knn = TimeSeriesKNN(n_neighbors=n_neighbors, metric=distance, metric_params=metric_params)
         knn.fit(X_unlike)
 
         # Get nearest neighbors
