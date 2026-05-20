@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from pymoo.core.population import Population
-from pymoo.operators.crossover.pntx import TwoPointCrossover
+from confetti.algorithm.crossover import TwoPointCrossover
 
 
 def _two_parent_arr(n_var: int, seed: int = 0, n_matings: int = 5):

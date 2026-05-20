@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from pymoo.algorithms.moo.nsga3 import NSGA3
-from pymoo.operators.crossover.pntx import TwoPointCrossover
+from confetti.algorithm.crossover import TwoPointCrossover
 from confetti.algorithm.mutation import BitflipMutation
 from confetti.algorithm.sampling import BinaryRandomSampling
 from pymoo.optimize import minimize

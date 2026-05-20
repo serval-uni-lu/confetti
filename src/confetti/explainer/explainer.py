@@ -17,7 +17,7 @@ from tslearn.neighbors import KNeighborsTimeSeries
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.optimize import minimize
 from pymoo.util.ref_dirs import get_reference_directions
-from pymoo.operators.crossover.pntx import TwoPointCrossover
+from confetti.algorithm.crossover import TwoPointCrossover
 from confetti.algorithm.mutation import BitflipMutation
 from confetti.algorithm.sampling import BinaryRandomSampling
 from pymoo.termination import get_termination
