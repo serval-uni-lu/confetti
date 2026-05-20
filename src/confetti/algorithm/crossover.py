@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any
 
 import numpy as np
-from pymoo.core.crossover import Crossover
 
-
-class _HasNVar(Protocol):
-    n_var: int
+from confetti.algorithm._operators import Crossover
 
 
 class TwoPointCrossover(Crossover):
@@ -37,7 +34,7 @@ class TwoPointCrossover(Crossover):
     def __init__(self, **kwargs) -> None:
         super().__init__(n_parents=2, n_offsprings=2, **kwargs)
 
-    def _do(self, problem: _HasNVar, X: np.ndarray, **kwargs) -> np.ndarray:
+    def _do(self, problem: Any, X: np.ndarray, **kwargs: Any) -> np.ndarray:
         """
         Apply two-point crossover to paired parents.
 

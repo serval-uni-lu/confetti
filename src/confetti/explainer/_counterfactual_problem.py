@@ -1,4 +1,4 @@
-from pymoo.core.problem import Problem
+from confetti.algorithm._problem import Problem
 from typing import Optional
 import numpy as np
 import importlib
@@ -26,7 +26,7 @@ class CounterfactualProblem(Problem):
         Define a multi-objective optimization problem for generating counterfactuals
         using a perturbed subsequence of the original time series instance.
 
-        This class is designed to be used with evolutionary algorithms from pymoo. It encodes
+        This class is designed to be used with CONFETTI's NSGA-III implementation. It encodes
         the counterfactual generation process as a two-objective optimization problem, where
         the goals are to maximize confidence in the target class and minimize the number of changes (sparsity).
         A third constraint ensures that the predicted probability exceeds a given threshold (`theta`).

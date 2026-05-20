@@ -18,7 +18,6 @@ Invariants captured:
 import numpy as np
 import pytest
 
-from pymoo.core.population import Population
 from confetti.algorithm.crossover import TwoPointCrossover
 
 
@@ -76,18 +75,14 @@ def test_crossover_prob_zero_is_identity(dummy_problem_factory):
     prob = dummy_problem_factory(n_var=n_var)
 
     X = _two_parent_arr(n_var=n_var, seed=2, n_matings=n_matings)
-    # Build a Population per mating for .do()
-    # pymoo expects a flat list of parents in pairs: pop[0]/pop[1] = mating 0, etc.
-    flat = np.concatenate([X[0], X[1]], axis=0)  # just materialize parents
-    # The .do() API with parents argument: we hand it (n_matings, n_parents) indices.
+    # Flatten parents into a single (2*n_matings, n_var) pool
+    flat = np.concatenate([X[0], X[1]], axis=0)
     parent_indices = np.stack(
         [np.arange(n_matings), np.arange(n_matings) + n_matings], axis=1
     )  # shape (n_matings, 2)
 
-    pop = Population.new("X", flat)
-    np.random.seed(0)
-    off_pop = TwoPointCrossover(prob=0.0).do(prob, pop, parents=parent_indices)
-    off_X = off_pop.get("X")
+    do_rng = np.random.default_rng(0)
+    off_X = TwoPointCrossover(prob=0.0).do(prob, flat, parent_indices, do_rng)
     # n_offsprings=2 per mating → 2 * n_matings rows
     assert off_X.shape == (2 * n_matings, n_var)
 

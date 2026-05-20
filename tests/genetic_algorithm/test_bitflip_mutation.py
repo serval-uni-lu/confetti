@@ -19,7 +19,6 @@ operator as ``BitflipMutation(prob=mutation_probability)`` without setting
 import numpy as np
 import pytest
 
-from pymoo.core.population import Population
 from confetti.algorithm.mutation import BitflipMutation
 
 
@@ -43,10 +42,9 @@ def test_mutation_prob_zero_is_identity(dummy_problem_factory):
 
     rng = np.random.default_rng(1)
     X = rng.integers(0, 2, size=(8, n_var), dtype=np.int64).astype(bool)
-    pop = Population.new("X", X)
-    np.random.seed(0)
-    out = BitflipMutation(prob=0.0, prob_var=1.0).do(prob, pop)
-    np.testing.assert_array_equal(out.get("X"), X)
+    do_rng = np.random.default_rng(0)
+    out = BitflipMutation(prob=0.0, prob_var=1.0).do(prob, X, do_rng)
+    np.testing.assert_array_equal(out, X)
 
 
 def test_mutation_prob_var_one_flips_all_bits(dummy_problem_factory):

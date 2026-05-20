@@ -13,13 +13,10 @@ of result.X is **intentionally not** asserted).
 import numpy as np
 import pytest
 
-from pymoo.algorithms.moo.nsga3 import NSGA3
+from confetti.algorithm import NSGA3, das_dennis, minimize
 from confetti.algorithm.crossover import TwoPointCrossover
 from confetti.algorithm.mutation import BitflipMutation
 from confetti.algorithm.sampling import BinaryRandomSampling
-from pymoo.optimize import minimize
-from pymoo.termination import get_termination
-from confetti.algorithm import das_dennis
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +69,7 @@ def test_minimize_returns_binary_X(problem_factory):
         subsequence_length=3,
     )
     algorithm = _make_nsga3(n_obj=2)
-    result = minimize(problem, algorithm, get_termination("n_gen", 10), seed=1, verbose=False)
+    result = minimize(problem, algorithm, 10, seed=1, verbose=False)
 
     assert result.X is not None
     X = np.atleast_2d(result.X)
@@ -92,7 +89,7 @@ def test_minimize_returns_feasible_population(problem_factory):
         subsequence_length=3,
     )
     algorithm = _make_nsga3(n_obj=2)
-    result = minimize(problem, algorithm, get_termination("n_gen", 10), seed=1, verbose=False)
+    result = minimize(problem, algorithm, 10, seed=1, verbose=False)
 
     # result.G is what pymoo stored from out["G"]. Every returned individual
     # must satisfy G ≤ 0 (theta - confidence ≤ 0 ⇒ confidence ≥ theta).
@@ -110,7 +107,7 @@ def test_minimize_returns_non_dominated_front(problem_factory):
         subsequence_length=3,
     )
     algorithm = _make_nsga3(n_obj=2)
-    result = minimize(problem, algorithm, get_termination("n_gen", 15), seed=1, verbose=False)
+    result = minimize(problem, algorithm, 15, seed=1, verbose=False)
 
     F = np.atleast_2d(result.F)
     nd = _non_dominated(F)
@@ -132,7 +129,7 @@ def test_minimize_infeasible_returns_none_X(problem_factory, mock_classifier_wea
         subsequence_length=3,
     )
     algorithm = _make_nsga3(n_obj=2)
-    result = minimize(problem, algorithm, get_termination("n_gen", 8), seed=1, verbose=False)
+    result = minimize(problem, algorithm, 8, seed=1, verbose=False)
 
     assert result.X is None
 
@@ -146,7 +143,7 @@ def test_minimize_respects_n_gen_termination(problem_factory):
     )
     algorithm = _make_nsga3(n_obj=2)
     n_gen = 7
-    result = minimize(problem, algorithm, get_termination("n_gen", n_gen), seed=1, verbose=False)
+    result = minimize(problem, algorithm, n_gen, seed=1, verbose=False)
     assert result.algorithm.n_gen == n_gen + 1  # pymoo counts the initial generation; this is locked behavior
 
 
@@ -166,7 +163,7 @@ def test_minimize_property_stable_across_runs(problem_factory):
             subsequence_length=3,
         )
         algorithm = _make_nsga3(n_obj=2)
-        return minimize(problem, algorithm, get_termination("n_gen", 10), seed=1, verbose=False)
+        return minimize(problem, algorithm, 10, seed=1, verbose=False)
 
     r1 = _run()
     r2 = _run()
@@ -199,7 +196,7 @@ def test_minimize_with_confidence_and_sparsity_preserves_quirk(problem_factory):
         subsequence_length=3,
     )
     algorithm = _make_nsga3(n_obj=3, n_partitions=3)
-    result = minimize(problem, algorithm, get_termination("n_gen", 15), seed=1, verbose=False)
+    result = minimize(problem, algorithm, 15, seed=1, verbose=False)
 
     if result.X is None:
         pytest.skip("No feasible solution found with the current fixtures at theta=0.5.")
@@ -220,7 +217,7 @@ def test_minimize_n_gen_one(problem_factory):
         subsequence_length=3,
     )
     algorithm = _make_nsga3(n_obj=2)
-    result = minimize(problem, algorithm, get_termination("n_gen", 1), seed=1, verbose=False)
+    result = minimize(problem, algorithm, 1, seed=1, verbose=False)
     assert result.algorithm.n_gen == 2  # pymoo counts initial generation
     if result.X is not None:
         X = np.atleast_2d(result.X)
@@ -245,7 +242,7 @@ def test_minimize_small_pop_size(problem_factory):
         crossover=TwoPointCrossover(prob=1.0),
         mutation=BitflipMutation(prob=0.9),
     )
-    result = minimize(problem, algorithm, get_termination("n_gen", 5), seed=1, verbose=False)
+    result = minimize(problem, algorithm, 5, seed=1, verbose=False)
     if result.X is not None:
         X = np.atleast_2d(result.X)
         assert X.shape[1] == problem.n_var

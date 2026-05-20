@@ -14,13 +14,10 @@ import joblib
 from confetti.utils._compat import require_keras, require_torch
 from tslearn.neighbors import KNeighborsTimeSeries
 
-from pymoo.algorithms.moo.nsga3 import NSGA3
-from pymoo.optimize import minimize
-from confetti.algorithm import das_dennis
+from confetti.algorithm import NSGA3, das_dennis, minimize
 from confetti.algorithm.crossover import TwoPointCrossover
 from confetti.algorithm.mutation import BitflipMutation
 from confetti.algorithm.sampling import BinaryRandomSampling
-from pymoo.termination import get_termination
 
 from multiprocessing import Pool
 from functools import partial
@@ -517,14 +514,12 @@ class CONFETTI:
                 mutation=BitflipMutation(prob=mutation_probability),
             )
 
-            termination = get_termination("n_gen", maximum_number_of_generations)
-
-            result = minimize(problem, algorithm, termination, seed=1, verbose=False)
+            result = minimize(problem, algorithm, maximum_number_of_generations, seed=1, verbose=False)
 
             if result.X is None: 
                 low = window + 1
             else:
-                objective_values.append(result.F)
+                objective_values.append(result.F)  # type: ignore[arg-type]  # F is never None when X is not None
 
                 n_samples = result.X.shape[0]
                 n_timesteps, n_features = query.shape

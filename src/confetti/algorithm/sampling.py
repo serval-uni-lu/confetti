@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any
 
 import numpy as np
-from pymoo.core.sampling import Sampling
 
-
-class _HasNVar(Protocol):
-    n_var: int
+from confetti.algorithm._operators import Sampling
 
 
 class BinaryRandomSampling(Sampling):
@@ -27,17 +24,12 @@ class BinaryRandomSampling(Sampling):
         the global numpy random state is used for backwards compatibility
         with pymoo's seeding mechanism (``minimize(..., seed=...)``).
 
-    Notes
-    -----
-    This class extends ``pymoo.core.sampling.Sampling`` so it is accepted
-    by ``pymoo.algorithms.moo.nsga3.NSGA3`` without modification.
     """
 
     def __init__(self, seed: int | None = None) -> None:
-        super().__init__()
         self._seed = seed
 
-    def _do(self, problem: _HasNVar, n_samples: int, **kwargs) -> np.ndarray:
+    def _do(self, problem: Any, n_samples: int, **kwargs: Any) -> np.ndarray:
         """
         Return a random binary population.
 

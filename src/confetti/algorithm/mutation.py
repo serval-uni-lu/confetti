@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any
 
 import numpy as np
-from pymoo.core.mutation import Mutation
 
-
-class _HasNVar(Protocol):
-    n_var: int
+from confetti.algorithm._operators import Mutation
 
 
 class BitflipMutation(Mutation):
@@ -38,7 +35,7 @@ class BitflipMutation(Mutation):
         ``min(0.5, 1 / problem.n_var)`` is used.
     """
 
-    def _do(self, problem: _HasNVar, X: np.ndarray, **kwargs) -> np.ndarray:
+    def _do(self, problem: Any, X: np.ndarray, **kwargs: Any) -> np.ndarray:
         """
         Flip bits in the population.
 
