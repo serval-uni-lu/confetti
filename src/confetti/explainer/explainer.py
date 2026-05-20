@@ -16,7 +16,7 @@ from tslearn.neighbors import KNeighborsTimeSeries
 
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.optimize import minimize
-from pymoo.util.ref_dirs import get_reference_directions
+from confetti.algorithm import das_dennis
 from confetti.algorithm.crossover import TwoPointCrossover
 from confetti.algorithm.mutation import BitflipMutation
 from confetti.algorithm.sampling import BinaryRandomSampling
@@ -507,9 +507,7 @@ class CONFETTI:
                 theta=theta,
             )
 
-            reference_directions = get_reference_directions(
-                name="das-dennis", n_dim=number_of_objectives, n_partitions=n_partitions
-            )
+            reference_directions = das_dennis(number_of_objectives, n_partitions)
 
             algorithm = NSGA3(
                 pop_size=population_size,

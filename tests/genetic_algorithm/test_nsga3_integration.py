@@ -19,7 +19,7 @@ from confetti.algorithm.mutation import BitflipMutation
 from confetti.algorithm.sampling import BinaryRandomSampling
 from pymoo.optimize import minimize
 from pymoo.termination import get_termination
-from pymoo.util.ref_dirs import get_reference_directions
+from confetti.algorithm import das_dennis
 
 
 # ---------------------------------------------------------------------------
@@ -27,7 +27,7 @@ from pymoo.util.ref_dirs import get_reference_directions
 # ---------------------------------------------------------------------------
 
 def _make_nsga3(n_obj, pop_size=40, n_partitions=3):
-    ref_dirs = get_reference_directions("das-dennis", n_obj, n_partitions=n_partitions)
+    ref_dirs = das_dennis(n_obj, n_partitions)
     return NSGA3(
         pop_size=pop_size,
         ref_dirs=ref_dirs,
@@ -237,7 +237,7 @@ def test_minimize_small_pop_size(problem_factory):
         start_timestep=2,
         subsequence_length=3,
     )
-    ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=2)
+    ref_dirs = das_dennis(2, 2)
     algorithm = NSGA3(
         pop_size=10,
         ref_dirs=ref_dirs,

@@ -8,6 +8,7 @@ way for an eventual Rust / PyO3 backend.
 
 from confetti.algorithm.crossover import TwoPointCrossover
 from confetti.algorithm.mutation import BitflipMutation
+from confetti.algorithm.reference_directions import das_dennis
 from confetti.algorithm.sampling import BinaryRandomSampling
 
-__all__ = ["BinaryRandomSampling", "BitflipMutation", "TwoPointCrossover"]
+__all__ = ["BinaryRandomSampling", "BitflipMutation", "TwoPointCrossover", "das_dennis"]
