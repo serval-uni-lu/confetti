@@ -805,26 +805,20 @@ class CONFETTI:
 
         Note
         -----
-        Distance metrics for proximity optimization are handled through the
-        ``tslearn.metrics`` module when ``optimize_proximity=True``.
+        CONFETTI includes built-in time-series distance metrics (DTW, Soft-DTW,
+        CTW, GAK, Manhattan) implemented in pure NumPy with optional Rust
+        acceleration via ``confetti._rust_core``. No external distance library
+        is required.
 
-        CONFETTI supports several time-series distances beyond Euclidean, including
-        Dynamic Time Warping (DTW), Soft-DTW, CTW, and GAK. These metrics are accessed
-        internally via ``tslearn.metrics`` through functions such as
-        ``cdist_dtw``, ``cdist_ctw``, ``cdist_soft_dtw`` and ``cdist_gak``.
-
-        - If a tslearn-based distance is selected (e.g., ``proximity_distance="dtw"``),
-          the proximity objective computes pairwise distances between each generated
-          counterfactual and the original instance using the corresponding tslearn
-          cost matrix.
-        - DTW can optionally use a Sakoe–Chiba band via ``dtw_window`` for faster and
-          more constrained alignment.
-        - ``tslearn`` is **only required** when a non-Euclidean proximity metric is
-          requested. If tslearn is not installed and such a metric is selected,
-          CONFETTI raises a ``CONFETTIConfigurationError`` describing the missing
-          dependency.
-
-        Euclidean proximity does not require tslearn and is always available.
+        - When a non-Euclidean proximity metric is selected (e.g.,
+          ``proximity_distance="dtw"``), the proximity objective computes pairwise
+          distances between each counterfactual and the original instance using the
+          corresponding built-in metric.
+        - DTW can optionally use a Sakoe–Chiba band via ``dtw_window`` for faster
+          and more constrained alignment.
+        - If the Rust extension is available, distance computations are
+          parallelised with Rayon; otherwise the pure-NumPy fallback is used
+          transparently.
         """
 
         if processes is not None:
