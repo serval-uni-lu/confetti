@@ -1,3 +1,7 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
 [project]
 name = "confetti-ts"
 version = "0.1.1"
@@ -39,11 +43,10 @@ Documentation = "https://confetti-ts.readthedocs.io/en/latest/index.html"
 Repository = "https://github.com/serval-uni-lu/confetti"
 Issues = "https://github.com/serval-uni-lu/confetti/issues"
 
-[tool.setuptools]
-package-dir = { "" = "src" }
-
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.maturin]
+python-source = "src"
+module-name = "confetti._rust_core"
+features = ["pyo3/extension-module"]
 
 [dependency-groups]
 dev = [

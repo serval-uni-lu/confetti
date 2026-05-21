@@ -1,3 +1,6 @@
+[rules]
+unresolved-import = "ignore"
+
 [src]
 exclude = [
     "tests",

@@ -8,6 +8,20 @@ import numpy as np
 
 from confetti.distances._cost import squared_euclidean_cost_matrix
 
+try:
+    from confetti._rust_core import (
+        gak as _rs_gak,
+        unnormalized_gak_py as _rs_unnormalized_gak,
+        cdist_gak as _rs_cdist_gak,
+    )
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
+
+
+def _ensure_f64_c(arr: np.ndarray) -> np.ndarray:
+    return np.ascontiguousarray(arr, dtype=np.float64)
+
 
 def _gak_gram_matrix(x: np.ndarray, y: np.ndarray, sigma: float) -> np.ndarray:
     """
@@ -50,6 +64,9 @@ def _unnormalized_gak(x: np.ndarray, y: np.ndarray, *, sigma: float = 1.0) -> fl
     float
         Unnormalized kernel value.
     """
+    if _HAS_RUST:
+        return _rs_unnormalized_gak(_ensure_f64_c(x), _ensure_f64_c(y), sigma)
+
     gram = _gak_gram_matrix(x, y, sigma)
     T1, T2 = gram.shape
 
@@ -84,6 +101,9 @@ def gak(x: np.ndarray, y: np.ndarray, *, sigma: float = 1.0) -> float:
         Normalized kernel value in ``[0, 1]``.  A value of 1 means the
         two series are identical.
     """
+    if _HAS_RUST:
+        return _rs_gak(_ensure_f64_c(x), _ensure_f64_c(y), sigma)
+
     k_xy = _unnormalized_gak(x, y, sigma=sigma)
     k_xx = _unnormalized_gak(x, x, sigma=sigma)
     k_yy = _unnormalized_gak(y, y, sigma=sigma)
@@ -113,6 +133,9 @@ def cdist_gak(
     np.ndarray
         Kernel matrix of shape ``(N, M)`` with values in ``[0, 1]``.
     """
+    if _HAS_RUST:
+        return np.asarray(_rs_cdist_gak(_ensure_f64_c(X), _ensure_f64_c(Y), sigma))
+
     N = X.shape[0]
     M = Y.shape[0]
 

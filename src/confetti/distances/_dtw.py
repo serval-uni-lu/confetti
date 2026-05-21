@@ -8,6 +8,20 @@ import numpy as np
 
 from confetti.distances._cost import squared_euclidean_cost_matrix
 
+try:
+    from confetti._rust_core import (
+        dtw as _rs_dtw,
+        dtw_with_path_py as _rs_dtw_with_path,
+        cdist_dtw as _rs_cdist_dtw,
+    )
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
+
+
+def _ensure_f64_c(arr: np.ndarray) -> np.ndarray:
+    return np.ascontiguousarray(arr, dtype=np.float64)
+
 
 def _sakoe_chiba_mask(T1: int, T2: int, radius: int) -> np.ndarray:
     """
@@ -91,6 +105,9 @@ def dtw(
     float
         DTW distance (square root of the accumulated squared Euclidean cost).
     """
+    if _HAS_RUST:
+        return _rs_dtw(_ensure_f64_c(x), _ensure_f64_c(y), sakoe_chiba_radius)
+
     C = squared_euclidean_cost_matrix(x, y)
     mask = None
     if sakoe_chiba_radius is not None:
@@ -125,6 +142,10 @@ def _dtw_with_path(
         Warping path as a list of ``(i, j)`` index pairs, from ``(0, 0)``
         to ``(T1-1, T2-1)``.
     """
+    if _HAS_RUST:
+        dist, path = _rs_dtw_with_path(_ensure_f64_c(x), _ensure_f64_c(y), sakoe_chiba_radius)
+        return dist, [(int(i), int(j)) for i, j in path]
+
     C = squared_euclidean_cost_matrix(x, y)
     mask = None
     if sakoe_chiba_radius is not None:
@@ -175,6 +196,9 @@ def cdist_dtw(
     radius = None
     if global_constraint == "sakoe_chiba" and sakoe_chiba_radius is not None:
         radius = int(sakoe_chiba_radius)
+
+    if _HAS_RUST:
+        return np.asarray(_rs_cdist_dtw(_ensure_f64_c(X), _ensure_f64_c(Y), radius))
 
     N = X.shape[0]
     M = Y.shape[0]

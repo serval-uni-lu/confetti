@@ -6,6 +6,19 @@ import numpy as np
 
 from confetti.distances._cost import squared_euclidean_cost_matrix
 
+try:
+    from confetti._rust_core import (
+        soft_dtw as _rs_soft_dtw,
+        cdist_soft_dtw as _rs_cdist_soft_dtw,
+    )
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
+
+
+def _ensure_f64_c(arr: np.ndarray) -> np.ndarray:
+    return np.ascontiguousarray(arr, dtype=np.float64)
+
 
 def _softmin3(a: float, b: float, c: float, gamma: float) -> float:
     """
@@ -46,6 +59,9 @@ def soft_dtw(
         Soft-DTW value.  Unlike standard DTW this is a similarity score
         that can be negative.
     """
+    if _HAS_RUST:
+        return _rs_soft_dtw(_ensure_f64_c(x), _ensure_f64_c(y), gamma)
+
     C = squared_euclidean_cost_matrix(x, y)
     T1, T2 = C.shape
 
@@ -84,6 +100,9 @@ def cdist_soft_dtw(
     np.ndarray
         Similarity matrix of shape ``(N, M)``.
     """
+    if _HAS_RUST:
+        return np.asarray(_rs_cdist_soft_dtw(_ensure_f64_c(X), _ensure_f64_c(Y), gamma))
+
     N = X.shape[0]
     M = Y.shape[0]
     result = np.empty((N, M))
