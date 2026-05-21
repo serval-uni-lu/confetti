@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
+try:
+    from confetti._rust_core import normalization_update_py as _rs_norm_update
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
+
 
 class HyperplaneNormalization:
     """
@@ -33,6 +39,17 @@ class HyperplaneNormalization:
             Index array of solutions belonging to the first non-dominated
             front.
         """
+        if _HAS_RUST:
+            new_ideal, nadir = _rs_norm_update(
+                np.ascontiguousarray(self.ideal_point, dtype=np.float64),
+                np.ascontiguousarray(F, dtype=np.float64),
+                np.ascontiguousarray(first_front, dtype=np.int64),
+                self.n_dim,
+            )
+            self.ideal_point = np.asarray(new_ideal)
+            self.nadir_point = np.asarray(nadir) if nadir is not None else None
+            return
+
         # --- ideal point (component-wise minimum) ---
         self.ideal_point = np.minimum(self.ideal_point, F.min(axis=0))
 

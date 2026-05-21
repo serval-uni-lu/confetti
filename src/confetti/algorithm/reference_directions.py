@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
+try:
+    from confetti._rust_core import das_dennis_py as _rs_das_dennis
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
+
 
 def das_dennis(n_dim: int, n_partitions: int) -> np.ndarray:
     """
@@ -42,6 +48,9 @@ def das_dennis(n_dim: int, n_partitions: int) -> np.ndarray:
         raise ValueError(f"n_dim must be >= 1, got {n_dim}")
     if n_partitions < 0:
         raise ValueError(f"n_partitions must be >= 0, got {n_partitions}")
+
+    if _HAS_RUST:
+        return np.asarray(_rs_das_dennis(n_dim, n_partitions))
 
     if n_dim == 1:
         return np.array([[1.0]])

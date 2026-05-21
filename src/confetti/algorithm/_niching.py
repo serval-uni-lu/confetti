@@ -4,6 +4,16 @@ from __future__ import annotations
 
 import numpy as np
 
+try:
+    from confetti._rust_core import associate_to_niches_py as _rs_associate
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
+
+
+def _ensure_f64_c(arr: np.ndarray) -> np.ndarray:
+    return np.ascontiguousarray(arr, dtype=np.float64)
+
 
 def associate_to_niches(
     F: np.ndarray,
@@ -32,6 +42,13 @@ def associate_to_niches(
         of shape ``(n,)`` giving the closest reference-direction index,
         and ``dist_to_niche`` is the corresponding perpendicular distance.
     """
+    if _HAS_RUST:
+        niche_of, dist_to_niche = _rs_associate(
+            _ensure_f64_c(F), _ensure_f64_c(ref_dirs),
+            _ensure_f64_c(ideal), _ensure_f64_c(nadir),
+        )
+        return np.asarray(niche_of), np.asarray(dist_to_niche)
+
     # Normalise objectives to [0, 1]
     denom = nadir - ideal
     denom[denom < 1e-12] = 1e-12

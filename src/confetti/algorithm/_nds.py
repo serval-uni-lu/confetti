@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
+try:
+    from confetti._rust_core import fast_non_dominated_sort_py as _rs_nds
+    _HAS_RUST = True
+except ImportError:
+    _HAS_RUST = False
+
 
 def fast_non_dominated_sort(F: np.ndarray) -> list[np.ndarray]:
     """
@@ -25,6 +31,9 @@ def fast_non_dominated_sort(F: np.ndarray) -> list[np.ndarray]:
         Fronts ordered from best (0) to worst.  Each element is an
         int array of row indices into *F*.
     """
+    if _HAS_RUST:
+        return [np.asarray(f) for f in _rs_nds(np.ascontiguousarray(F, dtype=np.float64))]
+
     n = F.shape[0]
     if n == 0:
         return []
