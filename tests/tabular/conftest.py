@@ -71,3 +71,42 @@ def numeric_reference_np():
         [70, 80000],
         [80, 90000],
     ], dtype=np.float64)
+
+
+class MockScaledClassifier:
+    """Classifier that expects input pre-scaled by 2x.
+
+    Returns class-1 probability via sigmoid on the mean of (X / 2) — if the
+    input is already doubled by the preprocessor the division cancels out and
+    the decision boundary sits at mean == 50.
+    """
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        X = np.asarray(X, dtype=np.float64)
+        score = 1 / (1 + np.exp(-(np.mean(X / 2, axis=1) - 50) / 10))
+        return np.column_stack([1 - score, score])
+
+
+class MockScaledPredictOnlyClassifier:
+    """Predict-only variant of ``MockScaledClassifier``."""
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        X = np.asarray(X, dtype=np.float64)
+        score = 1 / (1 + np.exp(-(np.mean(X / 2, axis=1) - 50) / 10))
+        return np.column_stack([1 - score, score])
+
+
+@pytest.fixture
+def mock_preprocessor():
+    """Preprocessor that doubles every value."""
+    return lambda X: X * 2
+
+
+@pytest.fixture
+def scaled_classifier():
+    return MockScaledClassifier()
+
+
+@pytest.fixture
+def scaled_predict_only_classifier():
+    return MockScaledPredictOnlyClassifier()

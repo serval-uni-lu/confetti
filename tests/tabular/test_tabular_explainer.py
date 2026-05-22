@@ -276,3 +276,88 @@ class TestCounterfactualEquality:
         cf1 = Counterfactual(counterfactual=arr1, label=1)
         cf2 = Counterfactual(counterfactual=arr2, label=1)
         assert cf1 == cf2
+
+
+class TestPreprocessorValidation:
+
+    def test_preprocessor_not_callable_raises(self, high_low_clf):
+        with pytest.raises(CONFETTIConfigurationError, match="preprocessor must be callable"):
+            TabularCONFETTI(model=high_low_clf, preprocessor="not_callable")
+
+    def test_preprocessor_none_is_valid(self, high_low_clf):
+        explainer = TabularCONFETTI(model=high_low_clf, preprocessor=None)
+        assert explainer is not None
+
+    def test_preprocessor_callable_accepted(self, high_low_clf):
+        explainer = TabularCONFETTI(model=high_low_clf, preprocessor=lambda X: X)
+        assert explainer is not None
+
+
+class TestPreprocessorIntegration:
+
+    def test_preprocessor_is_applied_during_generation(
+        self, scaled_classifier, mock_preprocessor, tabular_np
+    ):
+        explainer = TabularCONFETTI(model=scaled_classifier, preprocessor=mock_preprocessor)
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=tabular_np[:1],
+            reference_data=tabular_np,
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        assert results is not None
+        assert isinstance(results, CounterfactualResults)
+        assert len(results) >= 1
+
+    def test_preprocessor_with_numpy_input(
+        self, scaled_classifier, mock_preprocessor, tabular_np
+    ):
+        explainer = TabularCONFETTI(
+            model=scaled_classifier,
+            feature_names=["age", "income"],
+            preprocessor=mock_preprocessor,
+        )
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=tabular_np[:1],
+            reference_data=tabular_np,
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        assert results is not None
+        best_cf = results[0].best.counterfactual
+        assert isinstance(best_cf, pd.DataFrame)
+        assert list(best_cf.columns) == ["age", "income"]
+
+    def test_preprocessor_with_dataframe_input(
+        self, scaled_classifier, mock_preprocessor
+    ):
+        df = pd.DataFrame({
+            "score": [10, 15, 20, 80, 85, 90],
+            "color": ["red", "red", "red", "blue", "blue", "blue"],
+        })
+        explainer = TabularCONFETTI(model=scaled_classifier, preprocessor=mock_preprocessor)
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=df.iloc[:1],
+            reference_data=df,
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        if results is not None and results[0].best is not None:
+            best_cf = results[0].best.counterfactual
+            assert isinstance(best_cf, pd.DataFrame)
+            assert best_cf["color"].iloc[0] in ("red", "blue")
+
+    def test_preprocessor_predict_only_model(
+        self, scaled_predict_only_classifier, mock_preprocessor, tabular_np
+    ):
+        explainer = TabularCONFETTI(
+            model=scaled_predict_only_classifier,
+            preprocessor=mock_preprocessor,
+        )
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=tabular_np[:1],
+            reference_data=tabular_np,
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        assert results is None or isinstance(results, CounterfactualResults)

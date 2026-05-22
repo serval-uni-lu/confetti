@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from functools import partial
 from multiprocessing import Pool
+from collections.abc import Callable
 from typing import List, Optional
 
 import numpy as np
@@ -22,14 +23,20 @@ from confetti.tabular._tabular_problem import TabularCounterfactualProblem, _SUP
 class _TabularPredictorAdapter:
     """Normalize ``predict_proba`` / ``predict`` to a single ``predict`` method.
 
+    When a ``preprocessor`` is provided, it is applied to the input array
+    before every call to the underlying model.
+
     Parameters
     ----------
     ``model`` : object
         A fitted classifier with ``predict_proba`` or ``predict``.
+    ``preprocessor`` : Callable[[np.ndarray], np.ndarray] or None, default=None
+        Optional transform applied to ``X`` before prediction.
     """
 
-    def __init__(self, model) -> None:
+    def __init__(self, model, preprocessor: Callable[[np.ndarray], np.ndarray] | None = None) -> None:
         self._model = model
+        self._preprocessor = preprocessor
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """Return class probabilities of shape ``(n_samples, n_classes)``.
@@ -44,9 +51,10 @@ class _TabularPredictorAdapter:
         np.ndarray
             Probability matrix of shape ``(n_samples, n_classes)``.
         """
+        transformed = self._preprocessor(X) if self._preprocessor is not None else X
         if hasattr(self._model, "predict_proba"):
-            return self._model.predict_proba(X)
-        return self._model.predict(X)
+            return self._model.predict_proba(transformed)
+        return self._model.predict(transformed)
 
 
 class TabularCONFETTI:
@@ -66,25 +74,34 @@ class TabularCONFETTI:
     ``feature_names`` : list[str] or None, default=None
         Column names for output DataFrames.  Inferred from input
         DataFrames when not provided.
+    ``preprocessor`` : Callable[[np.ndarray], np.ndarray] or None, default=None
+        Optional transform applied to feature arrays before every call
+        to ``model.predict_proba`` (or ``model.predict``).  Use this
+        when the model expects a different encoding than the raw
+        feature space (e.g. one-hot encoding, standard scaling).  The
+        GA search, NUN lookup, proximity, and sparsity objectives all
+        operate on the raw features — only predictions are affected.
 
     Raises
     ------
     CONFETTIConfigurationError
         If *model* lacks a prediction interface, if *feature_names* is
-        not a list of strings, or if *feature_names* contains
-        duplicates.
+        not a list of strings, if *feature_names* contains duplicates,
+        or if *preprocessor* is not callable.
     """
 
     def __init__(
         self,
         model,
         feature_names: list[str] | None = None,
+        preprocessor: Callable[[np.ndarray], np.ndarray] | None = None,
     ) -> None:
         self._model = model
         self._feature_names = feature_names
+        self._preprocessor = preprocessor
         self._validate_init_params()
 
-        self._classifier = _TabularPredictorAdapter(model)
+        self._classifier = _TabularPredictorAdapter(model, preprocessor=preprocessor)
         self._encoder: Optional[FeatureEncoder] = None
         self._instances_np: Optional[np.ndarray] = None
         self._reference_np: Optional[np.ndarray] = None
@@ -743,13 +760,21 @@ class TabularCONFETTI:
         ------
         CONFETTIConfigurationError
             If *model* lacks a prediction interface, *feature_names* is
-            invalid, or *feature_names* has duplicates.
+            invalid, *feature_names* has duplicates, or *preprocessor*
+            is not callable.
         """
         if not hasattr(self._model, "predict_proba") and not hasattr(self._model, "predict"):
             raise CONFETTIConfigurationError(
                 message="Model must expose a predict_proba() or predict() method.",
                 param="model",
                 hint="Pass a fitted sklearn classifier or any model with predict_proba/predict.",
+            )
+
+        if self._preprocessor is not None and not callable(self._preprocessor):
+            raise CONFETTIConfigurationError(
+                message="preprocessor must be callable.",
+                param="preprocessor",
+                hint="Pass a function like sklearn's ColumnTransformer.transform or a custom lambda.",
             )
 
         if self._feature_names is not None:
