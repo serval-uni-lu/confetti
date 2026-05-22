@@ -6,6 +6,7 @@ import numpy as np
 
 try:
     from confetti._rust_core import fast_non_dominated_sort_py as _rs_nds
+
     _HAS_RUST = True
 except ImportError:
     _HAS_RUST = False
@@ -40,13 +41,13 @@ def fast_non_dominated_sort(F: np.ndarray) -> list[np.ndarray]:
 
     # dominates[i, j] = True iff solution i dominates solution j
     # i dominates j when: F[i] <= F[j] in ALL objectives AND F[i] < F[j] in AT LEAST one
-    diff = F[:, np.newaxis, :] - F[np.newaxis, :, :]   # (n, n, n_obj)
-    all_leq = np.all(diff <= 0, axis=2)                 # (n, n)
-    any_lt = np.any(diff < 0, axis=2)                   # (n, n)
-    dominates = all_leq & any_lt                        # (n, n)
+    diff = F[:, np.newaxis, :] - F[np.newaxis, :, :]  # (n, n, n_obj)
+    all_leq = np.all(diff <= 0, axis=2)  # (n, n)
+    any_lt = np.any(diff < 0, axis=2)  # (n, n)
+    dominates = all_leq & any_lt  # (n, n)
 
     # Number of solutions that dominate each solution
-    domination_count = dominates.sum(axis=0)            # (n,)
+    domination_count = dominates.sum(axis=0)  # (n,)
 
     remaining = np.ones(n, dtype=bool)
     fronts: list[np.ndarray] = []

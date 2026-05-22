@@ -129,9 +129,7 @@ class Crossover(ABC):
         self.n_parents = n_parents
         self.n_offsprings = n_offsprings
 
-    def do(
-        self, problem: Any, X: np.ndarray, parents: np.ndarray, rng: np.random.Generator
-    ) -> np.ndarray:
+    def do(self, problem: Any, X: np.ndarray, parents: np.ndarray, rng: np.random.Generator) -> np.ndarray:
         """
         Perform crossover on selected parent pairs.
 

@@ -206,9 +206,7 @@ class NSGA3:
         return Result(X=X_f, F=F_f, G=G_f, algorithm=self)
 
 
-def _tournament_selection(
-    F: np.ndarray, G: np.ndarray, n_matings: int, rng: np.random.Generator
-) -> np.ndarray:
+def _tournament_selection(F: np.ndarray, G: np.ndarray, n_matings: int, rng: np.random.Generator) -> np.ndarray:
     """
     Binary tournament selection favouring feasible solutions.
 

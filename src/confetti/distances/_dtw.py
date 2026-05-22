@@ -14,6 +14,7 @@ try:
         dtw_with_path_py as _rs_dtw_with_path,
         cdist_dtw as _rs_cdist_dtw,
     )
+
     _HAS_RUST = True
 except ImportError:
     _HAS_RUST = False

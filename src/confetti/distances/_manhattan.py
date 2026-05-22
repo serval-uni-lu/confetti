@@ -9,6 +9,7 @@ try:
         manhattan as _rs_manhattan,
         cdist_manhattan as _rs_cdist_manhattan,
     )
+
     _HAS_RUST = True
 except ImportError:
     _HAS_RUST = False

@@ -6,6 +6,7 @@ import numpy as np
 
 try:
     from confetti._rust_core import das_dennis_py as _rs_das_dennis
+
     _HAS_RUST = True
 except ImportError:
     _HAS_RUST = False

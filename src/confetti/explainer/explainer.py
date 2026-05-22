@@ -516,7 +516,7 @@ class CONFETTI:
 
             result = minimize(problem, algorithm, maximum_number_of_generations, seed=1, verbose=False)
 
-            if result.X is None: 
+            if result.X is None:
                 low = window + 1
             else:
                 objective_values.append(result.F)  # type: ignore[arg-type]  # F is never None when X is not None

@@ -11,6 +11,7 @@ try:
         soft_dtw as _rs_soft_dtw,
         cdist_soft_dtw as _rs_cdist_soft_dtw,
     )
+
     _HAS_RUST = True
 except ImportError:
     _HAS_RUST = False
@@ -27,11 +28,7 @@ def _softmin3(a: float, b: float, c: float, gamma: float) -> float:
     Uses the log-sum-exp trick to avoid overflow/underflow.
     """
     min_val = min(a, b, c)
-    exp_sum = (
-        np.exp((min_val - a) / gamma)
-        + np.exp((min_val - b) / gamma)
-        + np.exp((min_val - c) / gamma)
-    )
+    exp_sum = np.exp((min_val - a) / gamma) + np.exp((min_val - b) / gamma) + np.exp((min_val - c) / gamma)
     return min_val - gamma * np.log(exp_sum)
 
 
@@ -70,9 +67,7 @@ def soft_dtw(
 
     for i in range(1, T1 + 1):
         for j in range(1, T2 + 1):
-            R[i, j] = C[i - 1, j - 1] + _softmin3(
-                R[i - 1, j], R[i - 1, j - 1], R[i, j - 1], gamma
-            )
+            R[i, j] = C[i - 1, j - 1] + _softmin3(R[i - 1, j], R[i - 1, j - 1], R[i, j - 1], gamma)
 
     return float(R[T1, T2])
 

@@ -52,9 +52,7 @@ class TwoPointCrossover(Crossover):
         """
         _, n_matings, n_var = X.shape
 
-        r = np.vstack(
-            [np.random.permutation(n_var - 1) + 1 for _ in range(n_matings)]
-        )[:, :2]
+        r = np.vstack([np.random.permutation(n_var - 1) + 1 for _ in range(n_matings)])[:, :2]
         r.sort(axis=1)
         r = np.column_stack([r, np.full(n_matings, n_var)])
 
@@ -63,7 +61,7 @@ class TwoPointCrossover(Crossover):
             j = 0
             while j < r.shape[1] - 1:
                 a, b = r[i, j], r[i, j + 1]
-                M[i, int(a):int(b)] = True
+                M[i, int(a) : int(b)] = True
                 j += 2
 
         Xp = np.copy(X)

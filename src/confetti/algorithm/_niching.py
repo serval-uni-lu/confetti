@@ -6,6 +6,7 @@ import numpy as np
 
 try:
     from confetti._rust_core import associate_to_niches_py as _rs_associate
+
     _HAS_RUST = True
 except ImportError:
     _HAS_RUST = False
@@ -44,8 +45,10 @@ def associate_to_niches(
     """
     if _HAS_RUST:
         niche_of, dist_to_niche = _rs_associate(
-            _ensure_f64_c(F), _ensure_f64_c(ref_dirs),
-            _ensure_f64_c(ideal), _ensure_f64_c(nadir),
+            _ensure_f64_c(F),
+            _ensure_f64_c(ref_dirs),
+            _ensure_f64_c(ideal),
+            _ensure_f64_c(nadir),
         )
         return np.asarray(niche_of), np.asarray(dist_to_niche)
 
@@ -88,14 +91,14 @@ def _perpendicular_distance(N: np.ndarray, ref_dirs: np.ndarray) -> np.ndarray:
     # ref_dirs: (n_ref, n_obj)  →  (1, n_ref, n_obj)
     # N:        (n, n_obj)      →  (n, 1,     n_obj)
     u = ref_dirs[np.newaxis, :, :]  # (1, n_ref, n_obj)
-    v = N[:, np.newaxis, :]         # (n, 1, n_obj)
+    v = N[:, np.newaxis, :]  # (n, 1, n_obj)
 
-    u_dot_u = np.sum(u * u, axis=2, keepdims=True)       # (1, n_ref, 1)
+    u_dot_u = np.sum(u * u, axis=2, keepdims=True)  # (1, n_ref, 1)
     u_dot_u = np.maximum(u_dot_u, 1e-14)
-    proj_scalar = np.sum(v * u, axis=2, keepdims=True)    # (n, n_ref, 1)
-    proj = (proj_scalar / u_dot_u) * u                    # (n, n_ref, n_obj)
+    proj_scalar = np.sum(v * u, axis=2, keepdims=True)  # (n, n_ref, 1)
+    proj = (proj_scalar / u_dot_u) * u  # (n, n_ref, n_obj)
 
-    dist = np.linalg.norm(v - proj, axis=2)               # (n, n_ref)
+    dist = np.linalg.norm(v - proj, axis=2)  # (n, n_ref)
     return dist
 
 

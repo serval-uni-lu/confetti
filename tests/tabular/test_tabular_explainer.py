@@ -212,14 +212,28 @@ class TestEndToEndDataFrame:
         assert list(best_cf.columns) == ["age", "income"]
 
 
+
+
 class TestCategoricalFeatures:
 
-    def test_categorical_values_in_output(self, high_low_clf):
+    def test_categorical_values_in_output(self):
+        class CatBoostStyleClassifier:
+            """Classifier that accepts DataFrames with categorical columns."""
+
+            def predict_proba(self, X) -> np.ndarray:
+                if isinstance(X, pd.DataFrame):
+                    score = X.iloc[:, 0].astype(float) / 100
+                else:
+                    score = np.asarray(X, dtype=np.float64)[:, 0] / 100
+                score = np.clip(score, 0.01, 0.99)
+                return np.column_stack([1 - score, score])
+
         df = pd.DataFrame({
             "score": [10, 15, 20, 80, 85, 90],
             "color": ["red", "red", "red", "blue", "blue", "blue"],
         })
-        explainer = TabularCONFETTI(model=high_low_clf)
+        clf = CatBoostStyleClassifier()
+        explainer = TabularCONFETTI(model=clf)
         results = explainer.generate_counterfactuals(
             instances_to_explain=df.iloc[:1],
             reference_data=df,
@@ -230,6 +244,36 @@ class TestCategoricalFeatures:
             best_cf = results[0].best.counterfactual
             assert isinstance(best_cf, pd.DataFrame)
             assert best_cf["color"].iloc[0] in ("red", "blue")
+
+    def test_preprocessor_receives_dataframe_with_categoricals(self):
+        received_types = []
+
+        def tracking_preprocessor(X):
+            received_types.append(type(X))
+            if isinstance(X, pd.DataFrame):
+                return X.assign(
+                    color=X["color"].map({"red": 0.0, "blue": 1.0})
+                ).to_numpy(dtype=np.float64)
+            return np.asarray(X, dtype=np.float64)
+
+        class SimpleClassifier:
+            def predict_proba(self, X) -> np.ndarray:
+                X = np.asarray(X, dtype=np.float64)
+                score = 1 / (1 + np.exp(-(np.mean(X, axis=1) - 50) / 10))
+                return np.column_stack([1 - score, score])
+
+        df = pd.DataFrame({
+            "score": [10, 15, 20, 80, 85, 90],
+            "color": ["red", "red", "red", "blue", "blue", "blue"],
+        })
+        explainer = TabularCONFETTI(model=SimpleClassifier(), preprocessor=tracking_preprocessor)
+        explainer.generate_counterfactuals(
+            instances_to_explain=df.iloc[:1],
+            reference_data=df,
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        assert all(t is pd.DataFrame for t in received_types)
 
 
 class TestPredictOnlyModel:
@@ -333,7 +377,7 @@ class TestPreprocessorIntegration:
     ):
         df = pd.DataFrame({
             "score": [10, 15, 20, 80, 85, 90],
-            "color": ["red", "red", "red", "blue", "blue", "blue"],
+            "weight": [30, 35, 40, 70, 75, 80],
         })
         explainer = TabularCONFETTI(model=scaled_classifier, preprocessor=mock_preprocessor)
         results = explainer.generate_counterfactuals(
@@ -345,7 +389,7 @@ class TestPreprocessorIntegration:
         if results is not None and results[0].best is not None:
             best_cf = results[0].best.counterfactual
             assert isinstance(best_cf, pd.DataFrame)
-            assert best_cf["color"].iloc[0] in ("red", "blue")
+            assert list(best_cf.columns) == ["score", "weight"]
 
     def test_preprocessor_predict_only_model(
         self, scaled_predict_only_classifier, mock_preprocessor, tabular_np

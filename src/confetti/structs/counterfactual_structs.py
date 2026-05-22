@@ -243,7 +243,12 @@ class CounterfactualSet:
                 (str, int, float, np.int64, np.float64),
                 "string, integer, float, np.int64, or np.float64",
             ),
-            ("nearest_unlike_neighbour", nearest_unlike_neighbour, (np.ndarray, pd.DataFrame), "numpy array or DataFrame"),
+            (
+                "nearest_unlike_neighbour",
+                nearest_unlike_neighbour,
+                (np.ndarray, pd.DataFrame),
+                "numpy array or DataFrame",
+            ),
         ]
 
         for param, value, expected_type, expected_str in validations:

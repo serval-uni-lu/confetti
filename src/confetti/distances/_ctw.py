@@ -11,7 +11,9 @@ from confetti.distances._dtw import _dtw_with_path
 
 
 def _get_warp_matrices(
-    path: list[tuple[int, int]], nx: int, ny: int,
+    path: list[tuple[int, int]],
+    nx: int,
+    ny: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Convert a warping path into binary indicator matrices.
@@ -83,7 +85,9 @@ def ctw(
     y_proj = y @ np.eye(y.shape[1], n_components, dtype=np.float64)
 
     current_score, current_path = _dtw_with_path(
-        x_proj, y_proj, sakoe_chiba_radius=sakoe_chiba_radius,
+        x_proj,
+        y_proj,
+        sakoe_chiba_radius=sakoe_chiba_radius,
     )
 
     if max_iter <= 1 or len(current_path) < 2:
@@ -105,7 +109,9 @@ def ctw(
             break
 
         new_score, new_path = _dtw_with_path(
-            x_tr, y_tr, sakoe_chiba_radius=sakoe_chiba_radius,
+            x_tr,
+            y_tr,
+            sakoe_chiba_radius=sakoe_chiba_radius,
         )
 
         if new_path == current_path:
@@ -159,7 +165,8 @@ def cdist_ctw(
     for i in range(N):
         for j in range(M):
             result[i, j] = ctw(
-                X[i], Y[j],
+                X[i],
+                Y[j],
                 max_iter=max_iter,
                 n_components=n_components,
                 sakoe_chiba_radius=radius,

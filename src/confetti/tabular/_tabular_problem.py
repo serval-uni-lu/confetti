@@ -167,7 +167,7 @@ class TabularCounterfactualProblem(Problem):
         """
         diff = counterfactuals - original_instance
         if metric == "euclidean":
-            return np.sqrt(np.sum(diff ** 2, axis=1))
+            return np.sqrt(np.sum(diff**2, axis=1))
         return np.sum(np.abs(diff), axis=1)
 
     @staticmethod
@@ -205,8 +205,7 @@ class TabularCounterfactualProblem(Problem):
         if original_instance.shape != nun_instance.shape:
             raise CONFETTIConfigurationError(
                 message=(
-                    f"Shape mismatch: original_instance {original_instance.shape} "
-                    f"vs nun_instance {nun_instance.shape}."
+                    f"Shape mismatch: original_instance {original_instance.shape} vs nun_instance {nun_instance.shape}."
                 ),
                 param="nun_instance",
                 hint="Both instances must have the same number of features.",

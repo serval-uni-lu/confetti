@@ -49,4 +49,4 @@ except ImportError:
             ``||x[i] - y[j]||^2``.
         """
         diff = x[:, np.newaxis, :] - y[np.newaxis, :, :]
-        return np.sum(diff ** 2, axis=2)
+        return np.sum(diff**2, axis=2)

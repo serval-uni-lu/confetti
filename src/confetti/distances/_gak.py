@@ -14,6 +14,7 @@ try:
         unnormalized_gak_py as _rs_unnormalized_gak,
         cdist_gak as _rs_cdist_gak,
     )
+
     _HAS_RUST = True
 except ImportError:
     _HAS_RUST = False
@@ -41,7 +42,7 @@ def _gak_gram_matrix(x: np.ndarray, y: np.ndarray, sigma: float) -> np.ndarray:
     np.ndarray
         Gram matrix of shape ``(T1, T2)``.
     """
-    gram = -squared_euclidean_cost_matrix(x, y) / (2.0 * sigma ** 2)
+    gram = -squared_euclidean_cost_matrix(x, y) / (2.0 * sigma**2)
     gram -= np.log(2.0 - np.exp(gram))
     return np.exp(gram)
 
@@ -75,9 +76,7 @@ def _unnormalized_gak(x: np.ndarray, y: np.ndarray, *, sigma: float = 1.0) -> fl
 
     for i in range(T1):
         for j in range(T2):
-            cum_sum[i + 1, j + 1] = (
-                cum_sum[i, j + 1] + cum_sum[i + 1, j] + cum_sum[i, j]
-            ) * gram[i, j]
+            cum_sum[i + 1, j + 1] = (cum_sum[i, j + 1] + cum_sum[i + 1, j] + cum_sum[i, j]) * gram[i, j]
 
     return float(cum_sum[T1, T2])
 

@@ -4,7 +4,7 @@ import time
 from functools import partial
 from multiprocessing import Pool
 from collections.abc import Callable
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -16,25 +16,30 @@ from confetti.algorithm.mutation import BitflipMutation
 from confetti.algorithm.sampling import BinaryRandomSampling
 from confetti.errors import CONFETTIConfigurationError, CONFETTIDataTypeError
 from confetti.structs import Counterfactual, CounterfactualSet, CounterfactualResults
-from confetti.tabular._encoder import FeatureEncoder
 from confetti.tabular._tabular_problem import TabularCounterfactualProblem, _SUPPORTED_METRICS
 
 
 class _TabularPredictorAdapter:
     """Normalize ``predict_proba`` / ``predict`` to a single ``predict`` method.
 
-    When a ``preprocessor`` is provided, it is applied to the input array
+    When a ``preprocessor`` is provided, it is applied to the input
     before every call to the underlying model.
 
     Parameters
     ----------
     ``model`` : object
         A fitted classifier with ``predict_proba`` or ``predict``.
-    ``preprocessor`` : Callable[[np.ndarray], np.ndarray] or None, default=None
+    ``preprocessor`` : Callable or None, default=None
         Optional transform applied to ``X`` before prediction.
+        Receives a ``pd.DataFrame`` or ``np.ndarray`` depending on
+        whether the input data contained categorical columns.
     """
 
-    def __init__(self, model, preprocessor: Callable[[np.ndarray], np.ndarray] | None = None) -> None:
+    def __init__(
+        self,
+        model,
+        preprocessor: Callable[[pd.DataFrame | np.ndarray], pd.DataFrame | np.ndarray] | None = None,
+    ) -> None:
         self._model = model
         self._preprocessor = preprocessor
 
@@ -74,13 +79,16 @@ class TabularCONFETTI:
     ``feature_names`` : list[str] or None, default=None
         Column names for output DataFrames.  Inferred from input
         DataFrames when not provided.
-    ``preprocessor`` : Callable[[np.ndarray], np.ndarray] or None, default=None
-        Optional transform applied to feature arrays before every call
-        to ``model.predict_proba`` (or ``model.predict``).  Use this
-        when the model expects a different encoding than the raw
-        feature space (e.g. one-hot encoding, standard scaling).  The
-        GA search, NUN lookup, proximity, and sparsity objectives all
-        operate on the raw features — only predictions are affected.
+    ``preprocessor`` : Callable[[pd.DataFrame | np.ndarray], np.ndarray] or None, default=None
+        Optional transform applied before every call to
+        ``model.predict_proba`` (or ``model.predict``).  Use this when
+        the model expects a different encoding than the raw feature
+        space (e.g. one-hot encoding, standard scaling).  When the
+        input data contains categorical columns, the preprocessor
+        receives a ``pd.DataFrame`` with original category labels;
+        otherwise it receives a ``np.ndarray``.  The GA search, NUN
+        lookup, proximity, and sparsity objectives all operate on the
+        ordinal-encoded features — only predictions are affected.
 
     Raises
     ------
@@ -94,7 +102,7 @@ class TabularCONFETTI:
         self,
         model,
         feature_names: list[str] | None = None,
-        preprocessor: Callable[[np.ndarray], np.ndarray] | None = None,
+        preprocessor: Callable[[pd.DataFrame | np.ndarray], np.ndarray] | None = None,
     ) -> None:
         self._model = model
         self._feature_names = feature_names
@@ -102,7 +110,7 @@ class TabularCONFETTI:
         self._validate_init_params()
 
         self._classifier = _TabularPredictorAdapter(model, preprocessor=preprocessor)
-        self._encoder: Optional[FeatureEncoder] = None
+        self._categorical_mappings: Optional[dict[int, dict[int, Any]]] = None
         self._instances_np: Optional[np.ndarray] = None
         self._reference_np: Optional[np.ndarray] = None
         self._original_labels: Optional[np.ndarray] = None
@@ -230,17 +238,19 @@ class TabularCONFETTI:
             processes=processes,
         )
 
-        encoder = FeatureEncoder()
-        self._encoder = encoder
         self._instances_np, self._reference_np = self._prepare_data(
-            encoder, instances_to_explain, reference_data,
+            instances_to_explain,
+            reference_data,
         )
+        self._classifier = self._build_classifier()
 
         self._original_labels = np.argmax(
-            self._classifier.predict(self._instances_np), axis=1,
+            self._classifier.predict(self._instances_np),
+            axis=1,
         )
         self._reference_labels = np.argmax(
-            self._classifier.predict(self._reference_np), axis=1,
+            self._classifier.predict(self._reference_np),
+            axis=1,
         )
 
         if processes is not None:
@@ -277,16 +287,18 @@ class TabularCONFETTI:
 
     def _prepare_data(
         self,
-        encoder: FeatureEncoder,
         instances: pd.DataFrame | np.ndarray,
         reference: pd.DataFrame | np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Convert inputs to float64 ndarrays, fitting the encoder if DataFrames.
+        """Convert inputs to float64 ndarrays, ordinal-encoding categoricals.
+
+        When either input is a DataFrame with non-numeric columns, those
+        columns are ordinal-encoded and the reverse mapping is stored in
+        ``self._categorical_mappings`` so that arrays can later be
+        decoded back to original labels.
 
         Parameters
         ----------
-        ``encoder`` : FeatureEncoder
-            Encoder instance to fit and use for transforms.
         ``instances`` : pd.DataFrame or np.ndarray
             Instances to explain.
         ``reference`` : pd.DataFrame or np.ndarray
@@ -297,28 +309,111 @@ class TabularCONFETTI:
         tuple[np.ndarray, np.ndarray]
             ``(instances_np, reference_np)`` as float64 arrays.
         """
-        if isinstance(reference, pd.DataFrame):
-            encoder.fit(reference)
-            reference_np = encoder.transform(reference)
-        else:
-            reference_np = np.asarray(reference, dtype=np.float64)
-
-        if isinstance(instances, pd.DataFrame):
-            if not encoder.is_fitted:
-                encoder.fit(instances)
-            instances_np = encoder.transform(instances)
-        else:
-            instances_np = np.asarray(instances, dtype=np.float64)
-
         if self._feature_names is None:
             if isinstance(instances, pd.DataFrame):
                 self._feature_names = list(instances.columns)
             elif isinstance(reference, pd.DataFrame):
                 self._feature_names = list(reference.columns)
-            else:
-                self._feature_names = [f"feature_{i}" for i in range(instances_np.shape[1])]
+
+        self._categorical_mappings = None
+
+        ref_df = reference if isinstance(reference, pd.DataFrame) else None
+        inst_df = instances if isinstance(instances, pd.DataFrame) else None
+        schema_df = ref_df if ref_df is not None else inst_df
+
+        if schema_df is not None:
+            cat_mappings: dict[int, dict[int, Any]] = {}
+            for i, col in enumerate(schema_df.columns):
+                if not pd.api.types.is_numeric_dtype(schema_df[col]):
+                    unique_values = sorted(schema_df[col].dropna().unique(), key=str)
+                    cat_mappings[i] = {idx: val for idx, val in enumerate(unique_values)}
+            if cat_mappings:
+                self._categorical_mappings = cat_mappings
+
+        reference_np = self._encode_dataframe(ref_df) if ref_df is not None else np.asarray(reference, dtype=np.float64)
+        instances_np = (
+            self._encode_dataframe(inst_df) if inst_df is not None else np.asarray(instances, dtype=np.float64)
+        )
+
+        if self._feature_names is None:
+            self._feature_names = [f"feature_{i}" for i in range(instances_np.shape[1])]
 
         return instances_np, reference_np
+
+    def _encode_dataframe(self, df: pd.DataFrame) -> np.ndarray:
+        """Ordinal-encode categorical columns and convert to float64.
+
+        Parameters
+        ----------
+        ``df`` : pd.DataFrame
+            Input DataFrame.
+
+        Returns
+        -------
+        np.ndarray
+            Float64 array of shape ``(n_rows, n_cols)``.
+        """
+        if self._categorical_mappings is None:
+            return df.to_numpy(dtype=np.float64)
+
+        result = np.empty((len(df), df.shape[1]), dtype=np.float64)
+        for i, col in enumerate(df.columns):
+            if i in self._categorical_mappings:
+                int_to_value = self._categorical_mappings[i]
+                value_to_int = {v: k for k, v in int_to_value.items()}
+                result[:, i] = df[col].map(value_to_int).to_numpy(dtype=np.float64)
+            else:
+                result[:, i] = df[col].to_numpy(dtype=np.float64)
+        return result
+
+    def _decode_to_dataframe(self, X: np.ndarray) -> pd.DataFrame:
+        """Convert an ordinal-encoded array back to a DataFrame with original labels.
+
+        Parameters
+        ----------
+        ``X`` : np.ndarray
+            Array of shape ``(n_rows, n_features)``.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with original category labels restored.
+        """
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+
+        feature_names = self._feature_names or [f"feature_{i}" for i in range(X.shape[1])]
+        data: dict[str, Any] = {}
+        for i, name in enumerate(feature_names):
+            if self._categorical_mappings is not None and i in self._categorical_mappings:
+                mapping = self._categorical_mappings[i]
+                data[name] = [mapping.get(int(round(v)), v) for v in X[:, i]]
+            else:
+                data[name] = X[:, i]
+        return pd.DataFrame(data)
+
+    def _build_classifier(self) -> _TabularPredictorAdapter:
+        """Build the predictor adapter, wrapping the preprocessor with decoding if needed.
+
+        Returns
+        -------
+        _TabularPredictorAdapter
+            Adapter that decodes ordinal-encoded arrays back to
+            original-space DataFrames before calling the preprocessor
+            and model.
+        """
+        if self._categorical_mappings is not None:
+            user_preprocessor = self._preprocessor
+
+            def _decoding_preprocessor(X: pd.DataFrame | np.ndarray) -> pd.DataFrame | np.ndarray:
+                df = self._decode_to_dataframe(np.asarray(X))
+                if user_preprocessor is not None:
+                    return user_preprocessor(df)
+                return df
+
+            return _TabularPredictorAdapter(self._model, preprocessor=_decoding_preprocessor)
+
+        return _TabularPredictorAdapter(self._model, preprocessor=self._preprocessor)
 
     def _nearest_unlike_neighbour(
         self,
@@ -533,11 +628,12 @@ class TabularCONFETTI:
         Returns
         -------
         pd.DataFrame or np.ndarray
-            A single-row DataFrame if the encoder is fitted and has
-            categorical mappings, otherwise the original array.
+            A single-row DataFrame with original category labels when
+            categorical mappings exist, a plain DataFrame when feature
+            names are known, or the raw array otherwise.
         """
-        if self._encoder is not None and self._encoder.is_fitted and self._encoder.categorical_mappings:
-            return self._encoder.inverse_transform(arr)
+        if self._categorical_mappings is not None:
+            return self._decode_to_dataframe(arr)
         if self._feature_names is not None:
             return pd.DataFrame([arr], columns=self._feature_names)
         return arr
@@ -778,9 +874,7 @@ class TabularCONFETTI:
             )
 
         if self._feature_names is not None:
-            if not isinstance(self._feature_names, list) or not all(
-                isinstance(n, str) for n in self._feature_names
-            ):
+            if not isinstance(self._feature_names, list) or not all(isinstance(n, str) for n in self._feature_names):
                 raise CONFETTIConfigurationError(
                     message="feature_names must be a list of strings.",
                     param="feature_names",
@@ -830,7 +924,11 @@ class TabularCONFETTI:
                 param="reference_data",
             )
 
-        inst_shape = instances_to_explain.shape if isinstance(instances_to_explain, np.ndarray) else instances_to_explain.values.shape
+        inst_shape = (
+            instances_to_explain.shape
+            if isinstance(instances_to_explain, np.ndarray)
+            else instances_to_explain.values.shape
+        )
         ref_shape = reference_data.shape if isinstance(reference_data, np.ndarray) else reference_data.values.shape
 
         if len(inst_shape) != 2:

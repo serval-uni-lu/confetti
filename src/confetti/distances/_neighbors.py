@@ -95,7 +95,9 @@ class TimeSeriesKNN:
         return self._kneighbors_precomputed(X, return_distance)
 
     def _kneighbors_euclidean(
-        self, X: np.ndarray, return_distance: bool,
+        self,
+        X: np.ndarray,
+        return_distance: bool,
     ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         assert self._train_data is not None
         N, T, C = self._train_data.shape
@@ -107,7 +109,9 @@ class TimeSeriesKNN:
         return nn.kneighbors(query_flat, return_distance=return_distance)
 
     def _kneighbors_precomputed(
-        self, X: np.ndarray, return_distance: bool,
+        self,
+        X: np.ndarray,
+        return_distance: bool,
     ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         assert self._train_data is not None
 
@@ -121,9 +125,9 @@ class TimeSeriesKNN:
         nn.fit(np.zeros((self._train_data.shape[0], self._train_data.shape[0])))
 
         if return_distance:
-            indices = np.argsort(dist_matrix, axis=1)[:, :self.n_neighbors]
+            indices = np.argsort(dist_matrix, axis=1)[:, : self.n_neighbors]
             distances = np.take_along_axis(dist_matrix, indices, axis=1)
             return distances, indices
         else:
-            indices = np.argsort(dist_matrix, axis=1)[:, :self.n_neighbors]
+            indices = np.argsort(dist_matrix, axis=1)[:, : self.n_neighbors]
             return indices
