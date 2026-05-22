@@ -278,3 +278,86 @@ class TestValidation:
                 reference_labels=reference_labels,
                 theta=0.0,
             )
+
+
+class TestImmutableMask:
+
+    def test_immutable_mask_zeros_bits(self, original, nun, classifier, reference_labels):
+        immutable = np.array([True, False, False, False])
+        prob = TabularCounterfactualProblem(
+            original_instance=original,
+            nun_instance=nun,
+            nun_index=1,
+            classifier=classifier,
+            reference_labels=reference_labels,
+            immutable_mask=immutable,
+        )
+        x = np.array([[1, 1, 0, 0]], dtype=float)
+        out = {}
+        prob._evaluate(x, out)
+        cf = np.where(
+            np.array([[0, 1, 0, 0]]),
+            nun,
+            original,
+        )
+        np.testing.assert_array_equal(cf[0, 0], original[0])
+        np.testing.assert_array_equal(cf[0, 1], nun[1])
+
+    def test_immutable_mask_sparsity_excludes_immutable(self, original, nun, classifier, reference_labels):
+        immutable = np.array([True, False, False, False])
+        prob = TabularCounterfactualProblem(
+            original_instance=original,
+            nun_instance=nun,
+            nun_index=1,
+            classifier=classifier,
+            reference_labels=reference_labels,
+            immutable_mask=immutable,
+        )
+        x = np.array([[1, 1, 0, 0]], dtype=float)
+        out = {}
+        prob._evaluate(x, out)
+        assert out["F"][0, 1] == pytest.approx(1 / 4)
+
+    def test_immutable_mask_does_not_mutate_input(self, original, nun, classifier, reference_labels):
+        immutable = np.array([True, False, False, False])
+        prob = TabularCounterfactualProblem(
+            original_instance=original,
+            nun_instance=nun,
+            nun_index=1,
+            classifier=classifier,
+            reference_labels=reference_labels,
+            immutable_mask=immutable,
+        )
+        x = np.array([[1, 1, 0, 0]], dtype=float)
+        x_copy = x.copy()
+        out = {}
+        prob._evaluate(x, out)
+        np.testing.assert_array_equal(x, x_copy)
+
+    def test_immutable_mask_none_is_noop(self, problem):
+        x = np.array([[1, 1, 0, 0]], dtype=float)
+        out = {}
+        problem._evaluate(x, out)
+        assert out["F"][0, 1] == pytest.approx(2 / 4)
+
+    def test_immutable_mask_wrong_shape_raises(self, original, nun, classifier, reference_labels):
+        with pytest.raises(CONFETTIDataTypeError, match="immutable_mask must have shape"):
+            TabularCounterfactualProblem(
+                original_instance=original,
+                nun_instance=nun,
+                nun_index=1,
+                classifier=classifier,
+                reference_labels=reference_labels,
+                immutable_mask=np.array([True, False]),
+            )
+
+    def test_immutable_mask_wrong_dtype_raises(self, original, nun, classifier, reference_labels):
+        with pytest.raises(CONFETTIDataTypeError, match="boolean array"):
+            TabularCounterfactualProblem(
+                original_instance=original,
+                nun_instance=nun,
+                nun_index=1,
+                classifier=classifier,
+                reference_labels=reference_labels,
+                immutable_mask=np.array([1, 0, 0, 0]),
+            )

@@ -50,6 +50,10 @@ class TabularCounterfactualProblem(Problem):
     ``ranges`` : np.ndarray or None, default=None
         Per-feature range (max − min) of shape ``(n_features,)``.
         Required when *proximity_distance* is ``"gower"``.
+    ``immutable_mask`` : np.ndarray or None, default=None
+        Boolean array of shape ``(n_features,)`` where ``True``
+        marks features that must not be modified.  Immutable bits
+        are forced to zero before evaluating objectives.
 
     Attributes
     ----------
@@ -63,7 +67,8 @@ class TabularCounterfactualProblem(Problem):
     Raises
     ------
     CONFETTIDataTypeError
-        If instance arrays are not 1-D or have mismatched shapes.
+        If instance arrays are not 1-D or have mismatched shapes,
+        or if *immutable_mask* has wrong shape or dtype.
     CONFETTIConfigurationError
         If fewer than two objectives are selected, if the proximity
         metric is unsupported, or if *theta* is out of range.
@@ -83,6 +88,7 @@ class TabularCounterfactualProblem(Problem):
         theta: float = 0.51,
         cat_mask: np.ndarray | None = None,
         ranges: np.ndarray | None = None,
+        immutable_mask: np.ndarray | None = None,
     ):
         self._validate_init(
             original_instance,
@@ -94,6 +100,7 @@ class TabularCounterfactualProblem(Problem):
             theta,
             cat_mask,
             ranges,
+            immutable_mask,
         )
 
         self.original_instance = original_instance
@@ -108,6 +115,7 @@ class TabularCounterfactualProblem(Problem):
         self.theta = theta
         self.cat_mask = cat_mask
         self.ranges = ranges
+        self.immutable_mask = immutable_mask
 
         n_var = original_instance.shape[0]
         n_obj = int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
@@ -125,6 +133,10 @@ class TabularCounterfactualProblem(Problem):
             Output dictionary populated with ``"F"`` (objectives) and
             ``"G"`` (constraints).
         """
+        if self.immutable_mask is not None:
+            x = x.copy()
+            x[:, self.immutable_mask] = 0
+
         n_features = self.original_instance.shape[0]
         counterfactuals = np.where(x, self.nun_instance, self.original_instance)
 
@@ -212,13 +224,15 @@ class TabularCounterfactualProblem(Problem):
         theta: float,
         cat_mask: np.ndarray | None,
         ranges: np.ndarray | None,
+        immutable_mask: np.ndarray | None,
     ) -> None:
         """Validate constructor arguments.
 
         Raises
         ------
         CONFETTIDataTypeError
-            If instance arrays are not 1-D or shapes do not match.
+            If instance arrays are not 1-D, shapes do not match, or
+            *immutable_mask* has wrong shape or dtype.
         CONFETTIConfigurationError
             If fewer than two objectives, unsupported metric, or theta
             out of range.
@@ -283,3 +297,17 @@ class TabularCounterfactualProblem(Problem):
                 param="theta",
                 hint="Use a value like 0.51.",
             )
+
+        if immutable_mask is not None:
+            n_features = original_instance.shape[0]
+            if immutable_mask.ndim != 1 or immutable_mask.shape[0] != n_features:
+                raise CONFETTIDataTypeError(
+                    message=f"immutable_mask must have shape ({n_features},), got {immutable_mask.shape}.",
+                    param="immutable_mask",
+                )
+            if immutable_mask.dtype != np.bool_:
+                raise CONFETTIDataTypeError(
+                    message="immutable_mask must be a boolean array.",
+                    param="immutable_mask",
+                    hint="Pass an array like np.array([True, False, False]).",
+                )

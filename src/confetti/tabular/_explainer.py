@@ -117,6 +117,7 @@ class TabularCONFETTI:
         self._reference_labels: Optional[np.ndarray] = None
         self._cat_mask: Optional[np.ndarray] = None
         self._ranges: Optional[np.ndarray] = None
+        self._immutable_mask: Optional[np.ndarray] = None
 
     @property
     def model(self):
@@ -169,6 +170,7 @@ class TabularCONFETTI:
         optimize_proximity: bool = False,
         proximity_distance: str = "euclidean",
         categorical_features: list[int] | None = None,
+        immutable_features: list[str] | list[int] | None = None,
         processes: int | None = None,
         verbose: bool = False,
     ) -> CounterfactualResults | None:
@@ -222,6 +224,13 @@ class TabularCONFETTI:
               Manhattan distance.
 
             Ignored when *proximity_distance* is not ``"gower"``.
+        ``immutable_features`` : list[str] or list[int] or None, default=None
+            Features that must not be modified in counterfactual
+            explanations.  Accepts column names (``list[str]``) when
+            the input is a DataFrame or *feature_names* were provided,
+            or column indices (``list[int]``) for any input type.
+            Immutable features are guaranteed to retain their original
+            values and are excluded from the sparsity objective.
         ``processes`` : int or None, default=None
             Worker processes for parallel execution.  Sequential if
             ``None``.
@@ -262,6 +271,12 @@ class TabularCONFETTI:
         self._instances_np, self._reference_np = self._prepare_data(
             instances_to_explain,
             reference_data,
+        )
+
+        self._immutable_mask = self._resolve_immutable_features(
+            immutable_features,
+            instances_to_explain,
+            self._instances_np.shape[1],
         )
 
         self._cat_mask, self._ranges = self._build_gower_params(
@@ -482,6 +497,107 @@ class TabularCONFETTI:
 
         return cat_mask, ranges
 
+    def _resolve_immutable_features(
+        self,
+        immutable_features: list[str] | list[int] | None,
+        instances_to_explain: pd.DataFrame | np.ndarray,
+        n_features: int,
+    ) -> np.ndarray | None:
+        """Resolve *immutable_features* to a boolean mask.
+
+        Parameters
+        ----------
+        ``immutable_features`` : list[str] or list[int] or None
+            User-provided immutable feature specification.
+        ``instances_to_explain`` : pd.DataFrame or np.ndarray
+            Original input data (used to determine whether column
+            names are available).
+        ``n_features`` : int
+            Total number of features.
+
+        Returns
+        -------
+        np.ndarray or None
+            Boolean mask of shape ``(n_features,)`` where ``True``
+            marks immutable features, or ``None`` when no features
+            are immutable.
+
+        Raises
+        ------
+        CONFETTIDataTypeError
+            If *immutable_features* contains mixed types.
+        CONFETTIConfigurationError
+            If column names cannot be resolved, indices are out of
+            range, duplicates are present, or all features are
+            immutable.
+        """
+        if immutable_features is None or len(immutable_features) == 0:
+            return None
+
+        all_str = all(isinstance(f, str) for f in immutable_features)
+        all_int = all(isinstance(f, int) for f in immutable_features)
+
+        if not all_str and not all_int:
+            raise CONFETTIDataTypeError(
+                message="immutable_features must be all strings or all integers, not a mix.",
+                param="immutable_features",
+                hint="Use column names (['age', 'gender']) or indices ([0, 2]), not both.",
+            )
+
+        if all_str:
+            str_features: list[str] = [str(f) for f in immutable_features]
+            has_real_names = (
+                isinstance(instances_to_explain, pd.DataFrame)
+                or self._feature_names != [f"feature_{i}" for i in range(n_features)]
+            )
+            if not has_real_names:
+                raise CONFETTIConfigurationError(
+                    message="String immutable_features require DataFrame input or explicit feature_names.",
+                    param="immutable_features",
+                    hint="Pass a DataFrame, set feature_names at init, or use integer indices.",
+                )
+            if len(str_features) != len(set(str_features)):
+                raise CONFETTIConfigurationError(
+                    message="immutable_features contains duplicate names.",
+                    param="immutable_features",
+                )
+            assert self._feature_names is not None
+            indices: list[int] = []
+            for name in str_features:
+                if name not in self._feature_names:
+                    raise CONFETTIConfigurationError(
+                        message=f"immutable feature '{name}' not found in feature names.",
+                        param="immutable_features",
+                        hint=f"Available features: {self._feature_names}.",
+                    )
+                indices.append(self._feature_names.index(name))
+        else:
+            int_features: list[int] = [int(f) for f in immutable_features]
+            if len(int_features) != len(set(int_features)):
+                raise CONFETTIConfigurationError(
+                    message="immutable_features contains duplicate indices.",
+                    param="immutable_features",
+                )
+            for idx in int_features:
+                if idx < 0 or idx >= n_features:
+                    raise CONFETTIConfigurationError(
+                        message=f"immutable_features index {idx} is out of range for {n_features} features.",
+                        param="immutable_features",
+                        hint=f"Indices must be in [0, {n_features - 1}].",
+                    )
+            indices = int_features
+
+        if len(indices) >= n_features:
+            raise CONFETTIConfigurationError(
+                message="All features are immutable — no counterfactual search is possible.",
+                param="immutable_features",
+                hint="Leave at least one feature mutable.",
+            )
+
+        mask = np.zeros(n_features, dtype=np.bool_)
+        mask[indices] = True
+        return mask
+
     def _nearest_unlike_neighbour(
         self,
         query: np.ndarray,
@@ -612,6 +728,7 @@ class TabularCONFETTI:
             theta=theta,
             cat_mask=self._cat_mask,
             ranges=self._ranges,
+            immutable_mask=self._immutable_mask,
         )
 
         reference_directions = das_dennis(n_obj, n_partitions)
@@ -632,6 +749,8 @@ class TabularCONFETTI:
             return None
 
         counterfactuals_np = np.where(result.X, nun, query)
+        if self._immutable_mask is not None:
+            counterfactuals_np[:, self._immutable_mask] = query[self._immutable_mask]
         predictions = self._classifier.predict(counterfactuals_np)
         predicted_labels = np.argmax(predictions, axis=1)
 

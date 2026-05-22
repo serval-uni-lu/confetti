@@ -407,6 +407,216 @@ class TestPreprocessorIntegration:
         assert results is None or isinstance(results, CounterfactualResults)
 
 
+class TestImmutableFeaturesValidation:
+
+    def test_str_names_with_ndarray_no_feature_names_raises(self, high_low_clf, tabular_np):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        with pytest.raises(CONFETTIConfigurationError, match="String immutable_features"):
+            explainer.generate_counterfactuals(
+                instances_to_explain=tabular_np[:1],
+                reference_data=tabular_np,
+                immutable_features=["age"],
+                population_size=20,
+                maximum_number_of_generations=10,
+            )
+
+    def test_missing_column_name_raises(self, high_low_clf, tabular_df):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        with pytest.raises(CONFETTIConfigurationError, match="not found"):
+            explainer.generate_counterfactuals(
+                instances_to_explain=tabular_df.iloc[:1],
+                reference_data=tabular_df,
+                immutable_features=["nonexistent"],
+                population_size=20,
+                maximum_number_of_generations=10,
+            )
+
+    def test_out_of_range_index_raises(self, high_low_clf, tabular_np):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        with pytest.raises(CONFETTIConfigurationError, match="out of range"):
+            explainer.generate_counterfactuals(
+                instances_to_explain=tabular_np[:1],
+                reference_data=tabular_np,
+                immutable_features=[99],
+                population_size=20,
+                maximum_number_of_generations=10,
+            )
+
+    def test_negative_index_raises(self, high_low_clf, tabular_np):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        with pytest.raises(CONFETTIConfigurationError, match="out of range"):
+            explainer.generate_counterfactuals(
+                instances_to_explain=tabular_np[:1],
+                reference_data=tabular_np,
+                immutable_features=[-1],
+                population_size=20,
+                maximum_number_of_generations=10,
+            )
+
+    def test_all_features_immutable_raises(self, high_low_clf, tabular_np):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        with pytest.raises(CONFETTIConfigurationError, match="All features are immutable"):
+            explainer.generate_counterfactuals(
+                instances_to_explain=tabular_np[:1],
+                reference_data=tabular_np,
+                immutable_features=[0, 1],
+                population_size=20,
+                maximum_number_of_generations=10,
+            )
+
+    def test_duplicate_indices_raises(self, high_low_clf, tabular_np):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        with pytest.raises(CONFETTIConfigurationError, match="duplicate"):
+            explainer.generate_counterfactuals(
+                instances_to_explain=tabular_np[:1],
+                reference_data=tabular_np,
+                immutable_features=[0, 0],
+                population_size=20,
+                maximum_number_of_generations=10,
+            )
+
+    def test_duplicate_names_raises(self, high_low_clf, tabular_df):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        with pytest.raises(CONFETTIConfigurationError, match="duplicate"):
+            explainer.generate_counterfactuals(
+                instances_to_explain=tabular_df.iloc[:1],
+                reference_data=tabular_df,
+                immutable_features=["age", "age"],
+                population_size=20,
+                maximum_number_of_generations=10,
+            )
+
+    def test_mixed_types_raises(self, high_low_clf, tabular_df):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        with pytest.raises(CONFETTIDataTypeError, match="all strings or all integers"):
+            explainer.generate_counterfactuals(
+                instances_to_explain=tabular_df.iloc[:1],
+                reference_data=tabular_df,
+                immutable_features=["age", 1],
+                population_size=20,
+                maximum_number_of_generations=10,
+            )
+
+
+class TestImmutableFeaturesEndToEnd:
+
+    def test_immutable_ndarray_feature_unchanged(self, high_low_clf, tabular_np):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        original_val = tabular_np[0, 0]
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=tabular_np[:1],
+            reference_data=tabular_np,
+            immutable_features=[0],
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        if results is not None:
+            for cf_set in results:
+                for cf in cf_set.all_counterfactuals:
+                    if isinstance(cf.counterfactual, pd.DataFrame):
+                        assert cf.counterfactual.iloc[0, 0] == original_val
+                    else:
+                        assert cf.counterfactual[0] == original_val
+
+    def test_immutable_dataframe_column_unchanged(self, high_low_clf, tabular_df):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        original_age = tabular_df.iloc[0]["age"]
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=tabular_df.iloc[:1],
+            reference_data=tabular_df,
+            immutable_features=["age"],
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        if results is not None:
+            for cf_set in results:
+                for cf in cf_set.all_counterfactuals:
+                    assert cf.counterfactual["age"].iloc[0] == original_age
+
+    def test_immutable_with_preprocessor(self, scaled_classifier, mock_preprocessor, tabular_np):
+        explainer = TabularCONFETTI(
+            model=scaled_classifier,
+            preprocessor=mock_preprocessor,
+            feature_names=["age", "income"],
+        )
+        original_val = tabular_np[0, 0]
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=tabular_np[:1],
+            reference_data=tabular_np,
+            immutable_features=[0],
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        if results is not None:
+            for cf_set in results:
+                for cf in cf_set.all_counterfactuals:
+                    assert cf.counterfactual["age"].iloc[0] == original_val
+
+    def test_immutable_categorical_column_unchanged(self):
+        class CatClassifier:
+            def predict_proba(self, X) -> np.ndarray:
+                if isinstance(X, pd.DataFrame):
+                    score = X.iloc[:, 0].astype(float) / 100
+                else:
+                    score = np.asarray(X, dtype=np.float64)[:, 0] / 100
+                score = np.clip(score, 0.01, 0.99)
+                return np.column_stack([1 - score, score])
+
+        df = pd.DataFrame({
+            "score": [10, 15, 20, 80, 85, 90],
+            "color": ["red", "red", "red", "blue", "blue", "blue"],
+        })
+        explainer = TabularCONFETTI(model=CatClassifier())
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=df.iloc[:1],
+            reference_data=df,
+            immutable_features=["color"],
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        if results is not None:
+            for cf_set in results:
+                for cf in cf_set.all_counterfactuals:
+                    assert cf.counterfactual["color"].iloc[0] == "red"
+
+    def test_immutable_str_with_feature_names_init(self, high_low_clf, tabular_np):
+        explainer = TabularCONFETTI(model=high_low_clf, feature_names=["age", "income"])
+        original_val = tabular_np[0, 0]
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=tabular_np[:1],
+            reference_data=tabular_np,
+            immutable_features=["age"],
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        if results is not None:
+            for cf_set in results:
+                for cf in cf_set.all_counterfactuals:
+                    assert cf.counterfactual["age"].iloc[0] == original_val
+
+    def test_immutable_none_is_default(self, high_low_clf, tabular_np):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=tabular_np[:1],
+            reference_data=tabular_np,
+            immutable_features=None,
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        assert results is None or isinstance(results, CounterfactualResults)
+
+    def test_immutable_empty_list_is_noop(self, high_low_clf, tabular_np):
+        explainer = TabularCONFETTI(model=high_low_clf)
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=tabular_np[:1],
+            reference_data=tabular_np,
+            immutable_features=[],
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        assert results is None or isinstance(results, CounterfactualResults)
+
+
 class TestGowerProximity:
     """Tests for Gower distance integration in TabularCONFETTI."""
 
