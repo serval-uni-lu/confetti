@@ -17,8 +17,8 @@ class Counterfactual:
         :class:`~confetti.explainer.counterfactual_structs.CounterfactualSet`.
     """
 
-    counterfactual: np.ndarray
-    """The generated counterfactual time series."""
+    counterfactual: np.ndarray | pd.DataFrame
+    """The generated counterfactual (ndarray for time series, DataFrame for tabular)."""
 
     label: str | int | float
     """The predicted label corresponding to the counterfactual."""
@@ -27,7 +27,14 @@ class Counterfactual:
         if not isinstance(other, Counterfactual):
             return NotImplemented
 
-        return self.label == other.label and np.array_equal(self.counterfactual, other.counterfactual)
+        if self.label != other.label:
+            return False
+
+        if isinstance(self.counterfactual, pd.DataFrame) and isinstance(other.counterfactual, pd.DataFrame):
+            return self.counterfactual.equals(other.counterfactual)
+        if isinstance(self.counterfactual, np.ndarray) and isinstance(other.counterfactual, np.ndarray):
+            return np.array_equal(self.counterfactual, other.counterfactual)
+        return False
 
 
 class CounterfactualSet:
@@ -229,14 +236,14 @@ class CounterfactualSet:
         """
 
         validations = [
-            ("original_instance", original_instance, np.ndarray, "numpy array"),
+            ("original_instance", original_instance, (np.ndarray, pd.DataFrame), "numpy array or DataFrame"),
             (
                 "original_label",
                 original_label,
                 (str, int, float, np.int64, np.float64),
                 "string, integer, float, np.int64, or np.float64",
             ),
-            ("nearest_unlike_neighbour", nearest_unlike_neighbour, np.ndarray, "numpy array"),
+            ("nearest_unlike_neighbour", nearest_unlike_neighbour, (np.ndarray, pd.DataFrame), "numpy array or DataFrame"),
         ]
 
         for param, value, expected_type, expected_str in validations:
