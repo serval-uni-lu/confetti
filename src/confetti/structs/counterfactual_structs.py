@@ -42,11 +42,11 @@ class CounterfactualSet:
 
     Parameters
     ----------
-    original_instance : np.ndarray
+    original_instance : np.ndarray or pd.DataFrame
         The original instance for which counterfactuals were generated.
     original_label : str | int | float | np.int64 | np.float64
         The predicted label of the original instance.
-    nearest_unlike_neighbour : np.ndarray
+    nearest_unlike_neighbour : np.ndarray or pd.DataFrame
         The nearest unlike neighbour (NUN) of the original instance.
     best_solution : Counterfactual or None
         The best counterfactual solution identified by the method.
@@ -66,9 +66,9 @@ class CounterfactualSet:
 
     def __init__(
         self,
-        original_instance: np.ndarray,
+        original_instance: np.ndarray | pd.DataFrame,
         original_label: str | int | float | np.int64 | np.float64,
-        nearest_unlike_neighbour: np.ndarray,
+        nearest_unlike_neighbour: np.ndarray | pd.DataFrame,
         best_solution: None | Counterfactual,
         all_counterfactuals: List[Counterfactual],
         feature_importance: Optional[np.ndarray] = None,
@@ -82,20 +82,20 @@ class CounterfactualSet:
             feature_importance,
         )
 
-        self._original_instance: np.ndarray = original_instance
+        self._original_instance: np.ndarray | pd.DataFrame = original_instance
         self._original_label: str | int | float = original_label
-        self._nearest_unlike_neighbour: np.ndarray = nearest_unlike_neighbour
+        self._nearest_unlike_neighbour: np.ndarray | pd.DataFrame = nearest_unlike_neighbour
         self._best: Counterfactual = best_solution
         self._all_counterfactuals: List[Counterfactual] = all_counterfactuals
         self._feature_importance: Optional[np.ndarray] = feature_importance  # optional 1D weights
 
     @property
-    def original_instance(self) -> np.ndarray:
+    def original_instance(self) -> np.ndarray | pd.DataFrame:
         """Return the original instance.
 
         Returns
         -------
-        np.ndarray
+        np.ndarray or pd.DataFrame
             The original instance for which counterfactuals were generated.
         """
         return self._original_instance
@@ -112,12 +112,12 @@ class CounterfactualSet:
         return self._original_label
 
     @property
-    def nearest_unlike_neighbour(self) -> np.ndarray:
+    def nearest_unlike_neighbour(self) -> np.ndarray | pd.DataFrame:
         """Return the nearest unlike neighbour.
 
         Returns
         -------
-        np.ndarray
+        np.ndarray or pd.DataFrame
             The nearest unlike neighbour instance.
         """
         return self._nearest_unlike_neighbour
@@ -219,9 +219,9 @@ class CounterfactualSet:
 
     @staticmethod
     def _validate_dtypes(
-        original_instance: np.ndarray,
+        original_instance: np.ndarray | pd.DataFrame,
         original_label: Union[str, int, float, np.int64, np.float64],
-        nearest_unlike_neighbour: np.ndarray,
+        nearest_unlike_neighbour: np.ndarray | pd.DataFrame,
         best_solution: None | Counterfactual,
         all_counterfactuals: List[Counterfactual],
         feature_importance: Optional[np.ndarray],

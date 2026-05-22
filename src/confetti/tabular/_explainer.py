@@ -579,9 +579,9 @@ class TabularCONFETTI:
         nun_display = self._to_display(nun)
 
         counterfactual_set = CounterfactualSet(
-            original_instance=original_display if isinstance(original_display, np.ndarray) else query,
+            original_instance=original_display,
             original_label=original_labels[instance_index].item(),
-            nearest_unlike_neighbour=nun_display if isinstance(nun_display, np.ndarray) else nun,
+            nearest_unlike_neighbour=nun_display,
             best_solution=best,
             all_counterfactuals=all_counterfactuals,
         )
