@@ -405,3 +405,29 @@ class TestPreprocessorIntegration:
             maximum_number_of_generations=10,
         )
         assert results is None or isinstance(results, CounterfactualResults)
+
+
+class TestGowerProximity:
+    """Tests for Gower distance integration in TabularCONFETTI."""
+
+    def test_gower_nun_search_does_not_crash(self, high_low_clf):
+        """NUN search falls back to euclidean when proximity_distance='gower'."""
+        reference = np.array([
+            [10.0, 20.0, 0.0],
+            [15.0, 25.0, 1.0],
+            [80.0, 90.0, 0.0],
+            [85.0, 95.0, 1.0],
+        ])
+        instances = reference[:1]
+
+        explainer = TabularCONFETTI(model=high_low_clf)
+        results = explainer.generate_counterfactuals(
+            instances_to_explain=instances,
+            reference_data=reference,
+            optimize_proximity=True,
+            proximity_distance="gower",
+            categorical_features=[2],
+            population_size=20,
+            maximum_number_of_generations=10,
+        )
+        assert results is None or isinstance(results, CounterfactualResults)

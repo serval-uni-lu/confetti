@@ -518,7 +518,8 @@ class TabularCONFETTI:
 
         unlike_data = reference_np[unlike_indices]
 
-        nn = NearestNeighbors(n_neighbors=min(len(unlike_indices), 5), metric=distance)
+        nn_metric = "euclidean" if distance == "gower" else distance
+        nn = NearestNeighbors(n_neighbors=min(len(unlike_indices), 5), metric=nn_metric)
         nn.fit(unlike_data)
         _, ind = nn.kneighbors(query.reshape(1, -1))
 
