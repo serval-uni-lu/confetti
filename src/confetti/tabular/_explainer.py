@@ -115,6 +115,8 @@ class TabularCONFETTI:
         self._reference_np: Optional[np.ndarray] = None
         self._original_labels: Optional[np.ndarray] = None
         self._reference_labels: Optional[np.ndarray] = None
+        self._cat_mask: Optional[np.ndarray] = None
+        self._ranges: Optional[np.ndarray] = None
 
     @property
     def model(self):
@@ -166,6 +168,7 @@ class TabularCONFETTI:
         optimize_sparsity: bool = True,
         optimize_proximity: bool = False,
         proximity_distance: str = "euclidean",
+        categorical_features: list[int] | None = None,
         processes: int | None = None,
         verbose: bool = False,
     ) -> CounterfactualResults | None:
@@ -200,8 +203,25 @@ class TabularCONFETTI:
         ``optimize_proximity`` : bool, default=False
             Include proximity minimization as an objective.
         ``proximity_distance`` : str, default="euclidean"
-            Distance metric for proximity (``"euclidean"`` or
-            ``"manhattan"``).
+            Distance metric for proximity (``"euclidean"``,
+            ``"gower"``, or ``"manhattan"``).
+        ``categorical_features`` : list[int] or None, default=None
+            Indices of categorical features, used by the ``"gower"``
+            proximity metric.  When ``proximity_distance="gower"``:
+
+            - If provided, these indices mark which features are
+              categorical (binary match/mismatch).  All other features
+              are treated as numerical (range-normalized absolute
+              difference).
+            - If ``None`` and the input data is a DataFrame with
+              non-numeric columns, categorical features are
+              auto-detected from the DataFrame schema.
+            - If ``None`` and the input data is a numeric array or
+              numeric DataFrame, all features are treated as
+              numerical and Gower reduces to range-normalized
+              Manhattan distance.
+
+            Ignored when *proximity_distance* is not ``"gower"``.
         ``processes`` : int or None, default=None
             Worker processes for parallel execution.  Sequential if
             ``None``.
@@ -235,12 +255,19 @@ class TabularCONFETTI:
             optimize_sparsity=optimize_sparsity,
             optimize_proximity=optimize_proximity,
             proximity_distance=proximity_distance,
+            categorical_features=categorical_features,
             processes=processes,
         )
 
         self._instances_np, self._reference_np = self._prepare_data(
             instances_to_explain,
             reference_data,
+        )
+
+        self._cat_mask, self._ranges = self._build_gower_params(
+            proximity_distance,
+            categorical_features,
+            self._reference_np,
         )
         self._classifier = self._build_classifier()
 
@@ -415,6 +442,46 @@ class TabularCONFETTI:
 
         return _TabularPredictorAdapter(self._model, preprocessor=self._preprocessor)
 
+    def _build_gower_params(
+        self,
+        proximity_distance: str,
+        categorical_features: list[int] | None,
+        reference_np: np.ndarray,
+    ) -> tuple[np.ndarray | None, np.ndarray | None]:
+        """Compute ``cat_mask`` and ``ranges`` for Gower distance.
+
+        Parameters
+        ----------
+        ``proximity_distance`` : str
+            The proximity metric name.
+        ``categorical_features`` : list[int] or None
+            User-provided categorical feature indices.
+        ``reference_np`` : np.ndarray
+            Reference data of shape ``(n_samples, n_features)``.
+
+        Returns
+        -------
+        tuple[np.ndarray or None, np.ndarray or None]
+            ``(cat_mask, ranges)`` when *proximity_distance* is
+            ``"gower"``, otherwise ``(None, None)``.
+        """
+        if proximity_distance != "gower":
+            return None, None
+
+        n_features = reference_np.shape[1]
+        cat_mask = np.zeros(n_features, dtype=np.bool_)
+
+        if categorical_features is not None:
+            cat_mask[categorical_features] = True
+        elif self._categorical_mappings is not None:
+            for idx in self._categorical_mappings:
+                cat_mask[idx] = True
+
+        ranges = np.ptp(reference_np, axis=0).astype(np.float64)
+        ranges[cat_mask] = 0.0
+
+        return cat_mask, ranges
+
     def _nearest_unlike_neighbour(
         self,
         query: np.ndarray,
@@ -542,6 +609,8 @@ class TabularCONFETTI:
             optimize_proximity=optimize_proximity,
             proximity_distance=proximity_distance,
             theta=theta,
+            cat_mask=self._cat_mask,
+            ranges=self._ranges,
         )
 
         reference_directions = das_dennis(n_obj, n_partitions)
@@ -902,6 +971,7 @@ class TabularCONFETTI:
         optimize_sparsity: bool,
         optimize_proximity: bool,
         proximity_distance: str,
+        categorical_features: list[int] | None,
         processes: int | None,
     ) -> None:
         """Validate ``generate_counterfactuals`` arguments.
@@ -1003,6 +1073,27 @@ class TabularCONFETTI:
                 param="proximity_distance",
                 hint=f"Choose from {sorted(_SUPPORTED_METRICS)}.",
             )
+
+        if categorical_features is not None:
+            if not isinstance(categorical_features, list) or not all(isinstance(i, int) for i in categorical_features):
+                raise CONFETTIDataTypeError(
+                    message="categorical_features must be a list of integers.",
+                    param="categorical_features",
+                    hint="Pass a list of column indices, e.g. [0, 3, 5].",
+                )
+            if len(categorical_features) != len(set(categorical_features)):
+                raise CONFETTIConfigurationError(
+                    message="categorical_features contains duplicate indices.",
+                    param="categorical_features",
+                )
+            n_features = inst_shape[1]
+            for idx in categorical_features:
+                if idx < 0 or idx >= n_features:
+                    raise CONFETTIConfigurationError(
+                        message=f"categorical_features index {idx} is out of range for {n_features} features.",
+                        param="categorical_features",
+                        hint=f"Indices must be in [0, {n_features - 1}].",
+                    )
 
         if processes is not None:
             if not isinstance(processes, int) or processes < 1:

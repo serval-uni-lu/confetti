@@ -5,7 +5,7 @@ import numpy as np
 from confetti.algorithm._problem import Problem
 from confetti.errors import CONFETTIConfigurationError, CONFETTIDataTypeError
 
-_SUPPORTED_METRICS = {"euclidean", "manhattan"}
+_SUPPORTED_METRICS = {"euclidean", "gower", "manhattan"}
 
 
 class TabularCounterfactualProblem(Problem):
@@ -39,10 +39,17 @@ class TabularCounterfactualProblem(Problem):
     ``optimize_proximity`` : bool, default=False
         Include proximity minimization as an objective.
     ``proximity_distance`` : str, default="euclidean"
-        Distance metric for proximity. Must be ``"euclidean"`` or
-        ``"manhattan"``.
+        Distance metric for proximity. Must be ``"euclidean"``,
+        ``"gower"``, or ``"manhattan"``.
     ``theta`` : float, default=0.51
         Minimum predicted probability for the target class.
+    ``cat_mask`` : np.ndarray or None, default=None
+        Boolean array of shape ``(n_features,)`` indicating which
+        features are categorical.  Required when *proximity_distance*
+        is ``"gower"``.
+    ``ranges`` : np.ndarray or None, default=None
+        Per-feature range (max − min) of shape ``(n_features,)``.
+        Required when *proximity_distance* is ``"gower"``.
 
     Attributes
     ----------
@@ -74,6 +81,8 @@ class TabularCounterfactualProblem(Problem):
         optimize_proximity: bool = False,
         proximity_distance: str = "euclidean",
         theta: float = 0.51,
+        cat_mask: np.ndarray | None = None,
+        ranges: np.ndarray | None = None,
     ):
         self._validate_init(
             original_instance,
@@ -83,6 +92,8 @@ class TabularCounterfactualProblem(Problem):
             optimize_proximity,
             proximity_distance,
             theta,
+            cat_mask,
+            ranges,
         )
 
         self.original_instance = original_instance
@@ -95,6 +106,8 @@ class TabularCounterfactualProblem(Problem):
         self.optimize_proximity = optimize_proximity
         self.proximity_distance = proximity_distance
         self.theta = theta
+        self.cat_mask = cat_mask
+        self.ranges = ranges
 
         n_var = original_instance.shape[0]
         n_obj = int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
@@ -126,7 +139,9 @@ class TabularCounterfactualProblem(Problem):
             f2 = np.sum(x, axis=1) / n_features
 
         if self.optimize_proximity:
-            f3 = self._proximity(counterfactuals, self.original_instance, self.proximity_distance)
+            f3 = self._proximity(
+                counterfactuals, self.original_instance, self.proximity_distance, self.cat_mask, self.ranges
+            )
 
         objective_values = []
         if self.optimize_confidence and self.optimize_sparsity:
@@ -148,6 +163,8 @@ class TabularCounterfactualProblem(Problem):
         counterfactuals: np.ndarray,
         original_instance: np.ndarray,
         metric: str,
+        cat_mask: np.ndarray | None = None,
+        ranges: np.ndarray | None = None,
     ) -> np.ndarray:
         """Compute distance between counterfactuals and the original.
 
@@ -158,13 +175,27 @@ class TabularCounterfactualProblem(Problem):
         ``original_instance`` : np.ndarray
             Original feature vector, shape ``(n_features,)``.
         ``metric`` : str
-            ``"euclidean"`` or ``"manhattan"``.
+            ``"euclidean"``, ``"manhattan"``, or ``"gower"``.
+        ``cat_mask`` : np.ndarray or None
+            Boolean array of shape ``(n_features,)`` indicating
+            categorical features.  Required when *metric* is
+            ``"gower"``.
+        ``ranges`` : np.ndarray or None
+            Per-feature range of shape ``(n_features,)``.  Required
+            when *metric* is ``"gower"``.
 
         Returns
         -------
         np.ndarray
             Distance per counterfactual, shape ``(n_samples,)``.
         """
+        if metric == "gower":
+            from confetti.distances._gower import cdist_gower
+
+            assert cat_mask is not None and ranges is not None
+            original_2d = original_instance.reshape(1, -1)
+            return cdist_gower(counterfactuals, original_2d, cat_mask, ranges).ravel()
+
         diff = counterfactuals - original_instance
         if metric == "euclidean":
             return np.sqrt(np.sum(diff**2, axis=1))
@@ -179,6 +210,8 @@ class TabularCounterfactualProblem(Problem):
         optimize_proximity: bool,
         proximity_distance: str,
         theta: float,
+        cat_mask: np.ndarray | None,
+        ranges: np.ndarray | None,
     ) -> None:
         """Validate constructor arguments.
 
@@ -224,6 +257,25 @@ class TabularCounterfactualProblem(Problem):
                 param="proximity_distance",
                 hint=f"Choose from {sorted(_SUPPORTED_METRICS)}.",
             )
+
+        if proximity_distance == "gower":
+            n_features = original_instance.shape[0]
+            if cat_mask is None or ranges is None:
+                raise CONFETTIConfigurationError(
+                    message="Gower distance requires cat_mask and ranges.",
+                    param="proximity_distance",
+                    hint="Pass cat_mask (boolean array) and ranges (float array) of shape (n_features,).",
+                )
+            if cat_mask.shape != (n_features,):
+                raise CONFETTIDataTypeError(
+                    message=f"cat_mask must have shape ({n_features},), got {cat_mask.shape}.",
+                    param="cat_mask",
+                )
+            if ranges.shape != (n_features,):
+                raise CONFETTIDataTypeError(
+                    message=f"ranges must have shape ({n_features},), got {ranges.shape}.",
+                    param="ranges",
+                )
 
         if not (0 < theta < 1):
             raise CONFETTIConfigurationError(
