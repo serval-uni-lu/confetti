@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from confetti.constraints._values import Value
+from confetti.errors import CONFETTIConfigurationError
 
 
 class RelationConstraint(ABC):
@@ -136,7 +137,13 @@ class And(RelationConstraint):
 
     def __init__(self, operands: list[RelationConstraint]) -> None:
         if len(operands) < 2:
-            raise ValueError("And requires at least 2 operands.")
+            raise CONFETTIConfigurationError(
+                message=f"And requires at least 2 operands, got {len(operands)}.",
+                config={"n_operands": len(operands), "operands": [repr(o) for o in operands]},
+                param="operands",
+                hint="Combine at least 2 RelationConstraint instances (e.g. And([c1, c2])).",
+                source="And.__init__",
+            )
         self.operands = operands
 
     def violation(self, data: np.ndarray, names: list[str] | None) -> np.ndarray:
@@ -159,7 +166,13 @@ class Or(RelationConstraint):
 
     def __init__(self, operands: list[RelationConstraint]) -> None:
         if len(operands) < 2:
-            raise ValueError("Or requires at least 2 operands.")
+            raise CONFETTIConfigurationError(
+                message=f"Or requires at least 2 operands, got {len(operands)}.",
+                config={"n_operands": len(operands), "operands": [repr(o) for o in operands]},
+                param="operands",
+                hint="Combine at least 2 RelationConstraint instances (e.g. Or([c1, c2])).",
+                source="Or.__init__",
+            )
         self.operands = operands
 
     def violation(self, data: np.ndarray, names: list[str] | None) -> np.ndarray:
@@ -184,7 +197,13 @@ class Count(Value):
 
     def __init__(self, operands: list[RelationConstraint], inverse: bool = False) -> None:
         if len(operands) < 2:
-            raise ValueError("Count requires at least 2 operands.")
+            raise CONFETTIConfigurationError(
+                message=f"Count requires at least 2 operands, got {len(operands)}.",
+                config={"n_operands": len(operands), "inverse": inverse, "operands": [repr(o) for o in operands]},
+                param="operands",
+                hint="Provide at least 2 RelationConstraint instances to Count (e.g. Count([c1, c2])).",
+                source="Count.__init__",
+            )
         self.operands = operands
         self.inverse = inverse
 

@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from confetti.errors import CONFETTIConfigurationError, CONFETTIDataTypeError
+
 if TYPE_CHECKING:
     from confetti.constraints._relations import Less, LessEqual
 
@@ -141,7 +143,13 @@ class MathOperation(Value):
 
     def __init__(self, operator: str, left: Value, right: Value) -> None:
         if operator not in _VALID_OPS:
-            raise ValueError(f"Unsupported operator '{operator}'. Must be one of {sorted(_VALID_OPS)}.")
+            raise CONFETTIConfigurationError(
+                message=f"Unsupported operator '{operator}'. Must be one of {sorted(_VALID_OPS)}.",
+                config={"operator": operator, "left": repr(left), "right": repr(right)},
+                param="operator",
+                hint=f"Use one of the supported arithmetic operators: {sorted(_VALID_OPS)}.",
+                source="MathOperation.__init__",
+            )
         self.operator = operator
         self.left = left
         self.right = right
@@ -207,7 +215,13 @@ class ManySum(Value):
 
     def __init__(self, operands: list[Value]) -> None:
         if len(operands) < 2:
-            raise ValueError("ManySum requires at least 2 operands.")
+            raise CONFETTIConfigurationError(
+                message=f"ManySum requires at least 2 operands, got {len(operands)}.",
+                config={"n_operands": len(operands), "operands": [repr(o) for o in operands]},
+                param="operands",
+                hint="Provide at least 2 Value operands to ManySum (e.g. ManySum([Feature(0), Constant(1)])).",
+                source="ManySum.__init__",
+            )
         self.operands = operands
 
     def _eval(self, data: np.ndarray, names: list[str] | None) -> np.ndarray:
@@ -253,17 +267,41 @@ def _coerce(val: Value | int | float) -> Value:
         return val
     if isinstance(val, (int, float)):
         return Constant(val)
-    raise TypeError(f"Cannot coerce {type(val).__name__} to Value.")
+    raise CONFETTIDataTypeError(
+        message=f"Cannot coerce {type(val).__name__} to Value.",
+        config={"value": repr(val), "type": type(val).__name__},
+        param="val",
+        hint="Operands in constraint expressions must be Value nodes, int, or float.",
+        source="_coerce",
+    )
 
 
 def resolve_feature(feature_id: str | int, names: list[str] | None, n_features: int) -> int:
     """Resolve a feature reference to a column index."""
     if isinstance(feature_id, int):
         if feature_id < 0 or feature_id >= n_features:
-            raise IndexError(f"Feature index {feature_id} is out of range for {n_features} features.")
+            raise CONFETTIConfigurationError(
+                message=f"Feature index {feature_id} is out of range for {n_features} features.",
+                config={"feature_id": feature_id, "n_features": n_features},
+                param="feature_id",
+                hint=f"Use a feature index between 0 and {n_features - 1} (inclusive).",
+                source="resolve_feature",
+            )
         return feature_id
     if names is None:
-        raise ValueError(f"Feature name '{feature_id}' requires feature_names to be provided.")
+        raise CONFETTIConfigurationError(
+            message=f"Feature('{feature_id}') uses a string name but no feature_names were provided.",
+            config={"feature_id": feature_id, "feature_names": None},
+            param="feature_names",
+            hint="Pass feature_names to the ConstraintEvaluator or use integer indices in Feature().",
+            source="resolve_feature",
+        )
     if feature_id not in names:
-        raise ValueError(f"Feature name '{feature_id}' not found in feature_names: {names}.")
+        raise CONFETTIConfigurationError(
+            message=f"Feature name '{feature_id}' not found in feature_names: {names}.",
+            config={"feature_id": feature_id, "feature_names": names},
+            param="feature_id",
+            hint=f"Available feature names are: {names}.",
+            source="resolve_feature",
+        )
     return names.index(feature_id)

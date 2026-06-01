@@ -21,6 +21,7 @@ from confetti.constraints import (
     SafeDivision,
     repair_equality_constraints,
 )
+from confetti.errors import CONFETTIConfigurationError, CONFETTIDataTypeError
 from confetti.tabular._tabular_problem import TabularCounterfactualProblem
 
 
@@ -88,12 +89,12 @@ class TestASTConstruction:
 
     def test_and_requires_two_operands(self):
         c = Feature(0) <= Feature(1)
-        with pytest.raises(ValueError, match="at least 2"):
+        with pytest.raises(CONFETTIConfigurationError, match="at least 2"):
             And([c])
 
     def test_or_requires_two_operands(self):
         c = Feature(0) <= Feature(1)
-        with pytest.raises(ValueError, match="at least 2"):
+        with pytest.raises(CONFETTIConfigurationError, match="at least 2"):
             Or([c])
 
     def test_safe_division_construction(self):
@@ -152,12 +153,12 @@ class TestASTConstruction:
         assert result.operator == "*"
 
     def test_many_sum_requires_two_operands(self):
-        with pytest.raises(ValueError, match="at least 2"):
+        with pytest.raises(CONFETTIConfigurationError, match="at least 2"):
             ManySum([Constant(1)])
 
     def test_count_requires_two_operands(self):
         c = Feature(0) <= Feature(1)
-        with pytest.raises(ValueError, match="at least 2"):
+        with pytest.raises(CONFETTIConfigurationError, match="at least 2"):
             Count([c])
 
 
@@ -219,7 +220,7 @@ class TestConstraintEvaluation:
         assert result[0] == pytest.approx(0.0)
 
     def test_feature_name_not_found(self):
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(CONFETTIConfigurationError, match="not found"):
             ConstraintEvaluator(
                 Feature("unknown") <= Constant(1),
                 feature_names=["age"],
@@ -228,7 +229,7 @@ class TestConstraintEvaluation:
     def test_feature_index_out_of_range(self):
         data = np.array([[1.0, 2.0, 3.0, 4.0, 5.0]])
         c = Feature(99) <= Constant(1)
-        with pytest.raises(IndexError, match="out of range"):
+        with pytest.raises(CONFETTIConfigurationError, match="out of range"):
             c.violation(data, None)
 
     def test_count_violated(self):
@@ -459,14 +460,14 @@ class TestValidation:
             )
 
     def test_feature_name_validation_at_evaluator_init(self):
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(CONFETTIConfigurationError, match="not found"):
             ConstraintEvaluator(
                 Feature("missing") <= Constant(5),
                 feature_names=["a", "b"],
             )
 
     def test_feature_name_requires_names(self):
-        with pytest.raises(ValueError, match="requires feature_names"):
+        with pytest.raises(CONFETTIConfigurationError, match="no feature_names"):
             ConstraintEvaluator(
                 Feature("x") <= Constant(5),
                 feature_names=None,

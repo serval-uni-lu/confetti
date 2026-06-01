@@ -6,6 +6,8 @@ import struct
 
 import numpy as np
 
+from confetti.errors import CONFETTIDataTypeError
+
 from confetti.constraints._relations import (
     And,
     Count,
@@ -223,4 +225,10 @@ class _BytecodeCompiler:
             self._emit_op_u32(_OP_OR, len(node.operands))
 
         else:
-            raise TypeError(f"Cannot compile {type(node).__name__} to bytecode.")
+            raise CONFETTIDataTypeError(
+                message=f"Cannot compile {type(node).__name__} to bytecode.",
+                config={"node_type": type(node).__name__, "node": repr(node)},
+                param="node",
+                hint="Only Value and RelationConstraint AST nodes can be compiled to bytecode.",
+                source="_BytecodeCompiler.compile",
+            )

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from confetti.errors import CONFETTIConfigurationError
+
 from confetti.constraints._relations import (
     And,
     Count,
@@ -59,10 +61,18 @@ def validate_feature_refs(constraint: RelationConstraint, names: list[str] | Non
     for feat in collect_features(constraint):
         if isinstance(feat.feature_id, str):
             if names is None:
-                raise ValueError(
-                    f"Feature('{feat.feature_id}') requires feature_names to be provided."
+                raise CONFETTIConfigurationError(
+                    message=f"Feature('{feat.feature_id}') uses a string name but no feature_names were provided.",
+                    config={"feature_id": feat.feature_id, "feature_names": None},
+                    param="feature_names",
+                    hint="Pass feature_names to the ConstraintEvaluator or use integer indices in Feature().",
+                    source="validate_feature_refs",
                 )
             if feat.feature_id not in names:
-                raise ValueError(
-                    f"Feature name '{feat.feature_id}' not found in feature_names: {names}."
+                raise CONFETTIConfigurationError(
+                    message=f"Feature name '{feat.feature_id}' not found in feature_names: {names}.",
+                    config={"feature_id": feat.feature_id, "feature_names": names},
+                    param="feature_id",
+                    hint=f"Available feature names are: {names}.",
+                    source="validate_feature_refs",
                 )
