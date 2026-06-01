@@ -3,6 +3,12 @@ from __future__ import annotations
 import numpy as np
 
 from confetti.algorithm._problem import Problem
+from confetti.constraints import (
+    And,
+    ConstraintEvaluator,
+    RelationConstraint,
+    repair_equality_constraints,
+)
 from confetti.errors import CONFETTIConfigurationError, CONFETTIDataTypeError
 
 _SUPPORTED_METRICS = {"euclidean", "gower", "manhattan"}
@@ -54,6 +60,13 @@ class TabularCounterfactualProblem(Problem):
         Boolean array of shape ``(n_features,)`` where ``True``
         marks features that must not be modified.  Immutable bits
         are forced to zero before evaluating objectives.
+    ``relation_constraints`` : list[RelationConstraint] or None, default=None
+        Inter-feature relational constraints.  When provided, a
+        combined violation term is appended to ``out["G"]`` as an
+        additional inequality constraint.
+    ``feature_names`` : list[str] or None, default=None
+        Feature names for resolving string-based ``Feature``
+        references inside *relation_constraints*.
 
     Attributes
     ----------
@@ -62,7 +75,8 @@ class TabularCounterfactualProblem(Problem):
     n_obj : int
         Number of objectives.
     n_ieq_constr : int
-        Number of inequality constraints (always 1).
+        Number of inequality constraints (1 without relation
+        constraints, 2 with).
 
     Raises
     ------
@@ -89,6 +103,8 @@ class TabularCounterfactualProblem(Problem):
         cat_mask: np.ndarray | None = None,
         ranges: np.ndarray | None = None,
         immutable_mask: np.ndarray | None = None,
+        relation_constraints: list[RelationConstraint] | None = None,
+        feature_names: list[str] | None = None,
     ):
         self._validate_init(
             original_instance,
@@ -101,6 +117,8 @@ class TabularCounterfactualProblem(Problem):
             cat_mask,
             ranges,
             immutable_mask,
+            relation_constraints,
+            feature_names,
         )
 
         self.original_instance = original_instance
@@ -116,11 +134,19 @@ class TabularCounterfactualProblem(Problem):
         self.cat_mask = cat_mask
         self.ranges = ranges
         self.immutable_mask = immutable_mask
+        self.relation_constraints = relation_constraints
+        self.feature_names = feature_names
+
+        self._constraint_evaluator: ConstraintEvaluator | None = None
+        if relation_constraints:
+            combined = And(relation_constraints) if len(relation_constraints) > 1 else relation_constraints[0]
+            self._constraint_evaluator = ConstraintEvaluator(combined, feature_names=feature_names)
 
         n_var = original_instance.shape[0]
         n_obj = int(optimize_confidence) + int(optimize_sparsity) + int(optimize_proximity)
+        n_ieq_constr = 2 if relation_constraints else 1
 
-        super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=1)
+        super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=n_ieq_constr)
 
     def _evaluate(self, x, out, *args, **kwargs):
         """Evaluate a batch of binary masks against all objectives.
@@ -140,10 +166,17 @@ class TabularCounterfactualProblem(Problem):
         n_features = self.original_instance.shape[0]
         counterfactuals = np.where(x, self.nun_instance, self.original_instance)
 
+        if self.relation_constraints:
+            repair_equality_constraints(counterfactuals, self.relation_constraints, self.feature_names)
+
         target_label = self.reference_labels[self.nun_index]
         f1 = self.classifier.predict(counterfactuals)[:, target_label]
 
-        out["G"] = [self.theta - f1]
+        if self._constraint_evaluator is not None:
+            violation = self._constraint_evaluator.evaluate(counterfactuals)
+            out["G"] = np.column_stack([self.theta - f1, violation])
+        else:
+            out["G"] = [self.theta - f1]
 
         f2, f3 = None, None
 
@@ -225,6 +258,8 @@ class TabularCounterfactualProblem(Problem):
         cat_mask: np.ndarray | None,
         ranges: np.ndarray | None,
         immutable_mask: np.ndarray | None,
+        relation_constraints: list[RelationConstraint] | None = None,
+        feature_names: list[str] | None = None,
     ) -> None:
         """Validate constructor arguments.
 
@@ -311,3 +346,16 @@ class TabularCounterfactualProblem(Problem):
                     param="immutable_mask",
                     hint="Pass an array like np.array([True, False, False]).",
                 )
+
+        if relation_constraints is not None:
+            if not isinstance(relation_constraints, list):
+                raise CONFETTIDataTypeError(
+                    message="relation_constraints must be a list of RelationConstraint instances.",
+                    param="relation_constraints",
+                )
+            for i, c in enumerate(relation_constraints):
+                if not isinstance(c, RelationConstraint):
+                    raise CONFETTIDataTypeError(
+                        message=f"relation_constraints[{i}] is {type(c).__name__}, expected RelationConstraint.",
+                        param="relation_constraints",
+                    )

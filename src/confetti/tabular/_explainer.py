@@ -14,6 +14,7 @@ from confetti.algorithm import NSGA3, das_dennis, minimize
 from confetti.algorithm.crossover import TwoPointCrossover
 from confetti.algorithm.mutation import BitflipMutation
 from confetti.algorithm.sampling import BinaryRandomSampling
+from confetti.constraints import RelationConstraint
 from confetti.errors import CONFETTIConfigurationError, CONFETTIDataTypeError
 from confetti.structs import Counterfactual, CounterfactualSet, CounterfactualResults
 from confetti.tabular._tabular_problem import TabularCounterfactualProblem, _SUPPORTED_METRICS
@@ -118,6 +119,7 @@ class TabularCONFETTI:
         self._cat_mask: Optional[np.ndarray] = None
         self._ranges: Optional[np.ndarray] = None
         self._immutable_mask: Optional[np.ndarray] = None
+        self._relation_constraints: Optional[list[RelationConstraint]] = None
 
     @property
     def model(self):
@@ -171,6 +173,7 @@ class TabularCONFETTI:
         proximity_distance: str = "euclidean",
         categorical_features: list[int] | None = None,
         immutable_features: list[str] | list[int] | None = None,
+        relation_constraints: list[RelationConstraint] | None = None,
         processes: int | None = None,
         verbose: bool = False,
     ) -> CounterfactualResults | None:
@@ -231,6 +234,12 @@ class TabularCONFETTI:
             or column indices (``list[int]``) for any input type.
             Immutable features are guaranteed to retain their original
             values and are excluded from the sparsity objective.
+        ``relation_constraints`` : list[RelationConstraint] or None, default=None
+            Inter-feature relational constraints.  When provided,
+            constraint violations are added as an additional inequality
+            constraint in the GA.  ``Equal`` constraints with a single
+            ``Feature`` left operand are also repaired in-place before
+            objective computation.
         ``processes`` : int or None, default=None
             Worker processes for parallel execution.  Sequential if
             ``None``.
@@ -265,6 +274,7 @@ class TabularCONFETTI:
             optimize_proximity=optimize_proximity,
             proximity_distance=proximity_distance,
             categorical_features=categorical_features,
+            relation_constraints=relation_constraints,
             processes=processes,
         )
 
@@ -294,6 +304,8 @@ class TabularCONFETTI:
             self._classifier.predict(self._reference_np),
             axis=1,
         )
+
+        self._relation_constraints = relation_constraints
 
         if processes is not None:
             return self._parallelized_generator(
@@ -729,6 +741,8 @@ class TabularCONFETTI:
             cat_mask=self._cat_mask,
             ranges=self._ranges,
             immutable_mask=self._immutable_mask,
+            relation_constraints=self._relation_constraints,
+            feature_names=self._feature_names,
         )
 
         reference_directions = das_dennis(n_obj, n_partitions)
@@ -1092,7 +1106,8 @@ class TabularCONFETTI:
         optimize_proximity: bool,
         proximity_distance: str,
         categorical_features: list[int] | None,
-        processes: int | None,
+        relation_constraints: list[RelationConstraint] | None = None,
+        processes: int | None = None,
     ) -> None:
         """Validate ``generate_counterfactuals`` arguments.
 
@@ -1213,6 +1228,19 @@ class TabularCONFETTI:
                         message=f"categorical_features index {idx} is out of range for {n_features} features.",
                         param="categorical_features",
                         hint=f"Indices must be in [0, {n_features - 1}].",
+                    )
+
+        if relation_constraints is not None:
+            if not isinstance(relation_constraints, list):
+                raise CONFETTIDataTypeError(
+                    message="relation_constraints must be a list of RelationConstraint instances.",
+                    param="relation_constraints",
+                )
+            for i, c in enumerate(relation_constraints):
+                if not isinstance(c, RelationConstraint):
+                    raise CONFETTIDataTypeError(
+                        message=f"relation_constraints[{i}] is {type(c).__name__}, expected RelationConstraint.",
+                        param="relation_constraints",
                     )
 
         if processes is not None:
