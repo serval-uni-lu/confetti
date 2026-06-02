@@ -118,9 +118,7 @@ class ConstraintEvaluator:
         """
         if self._bytecode is not None:
             data = np.ascontiguousarray(x, dtype=np.float64)
-            return np.asarray(
-                _rs_evaluate_constraints(data, self._bytecode, self._constants, self._feature_indices)
-            )
+            return np.asarray(_rs_evaluate_constraints(data, self._bytecode, self._constants, self._feature_indices))
         return self.constraint.violation(x, self.feature_names)
 
 

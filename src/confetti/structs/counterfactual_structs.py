@@ -10,7 +10,6 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-
 @dataclass
 class Counterfactual:
     """Container for a single counterfactual instance and its predicted label.

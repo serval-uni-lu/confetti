@@ -561,10 +561,9 @@ class TabularCONFETTI:
 
         if all_str:
             str_features: list[str] = [str(f) for f in immutable_features]
-            has_real_names = (
-                isinstance(instances_to_explain, pd.DataFrame)
-                or self._feature_names != [f"feature_{i}" for i in range(n_features)]
-            )
+            has_real_names = isinstance(instances_to_explain, pd.DataFrame) or self._feature_names != [
+                f"feature_{i}" for i in range(n_features)
+            ]
             if not has_real_names:
                 raise CONFETTIConfigurationError(
                     message="String immutable_features require DataFrame input or explicit feature_names.",
