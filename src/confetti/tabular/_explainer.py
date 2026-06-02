@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from functools import partial
 from multiprocessing import Pool
@@ -18,6 +19,8 @@ from confetti.constraints import RelationConstraint
 from confetti.errors import CONFETTIConfigurationError, CONFETTIDataTypeError
 from confetti.structs import Counterfactual, CounterfactualSet, CounterfactualResults
 from confetti.tabular._tabular_problem import TabularCounterfactualProblem, _SUPPORTED_METRICS
+
+logger = logging.getLogger(__name__)
 
 
 class _TabularPredictorAdapter:
@@ -725,7 +728,7 @@ class TabularCONFETTI:
 
         if verbose:
             start_time = time.time()
-            print(f"Optimization started for instance {instance_index}.")
+            logger.info("Optimization started for instance %d.", instance_index)
 
         problem = TabularCounterfactualProblem(
             original_instance=query,
@@ -759,7 +762,7 @@ class TabularCONFETTI:
 
         if result.X is None:
             if verbose:
-                print(f"No valid solutions for instance {instance_index}.")
+                logger.info("No valid solutions for instance %d.", instance_index)
             return None
 
         counterfactuals_np = np.where(result.X, nun, query)
@@ -791,7 +794,7 @@ class TabularCONFETTI:
 
         if verbose:
             elapsed = time.time() - start_time
-            print(f"Instance {instance_index} done in {elapsed:.2f}s.")
+            logger.info("Instance %d done in %.2fs.", instance_index, elapsed)
 
         return counterfactual_set
 
@@ -881,7 +884,7 @@ class TabularCONFETTI:
 
             if nun_index is None:
                 if verbose:
-                    print(f"Skipping instance {idx}: no valid NUN found.")
+                    logger.info("Skipping instance %d: no valid NUN found.", idx)
                 continue
 
             result = self._optimization(
@@ -953,10 +956,8 @@ class TabularCONFETTI:
 
         instances_np, _, _, _ = self._require_state()
 
-        pool = Pool(processes=processes)
-        results = pool.map(wrapped, range(len(instances_np)))
-        pool.close()
-        pool.join()
+        with Pool(processes=processes) as pool:
+            results = pool.map(wrapped, range(len(instances_np)))
 
         counterfactual_sets = [r for r in results if r is not None]
 
@@ -1004,7 +1005,7 @@ class TabularCONFETTI:
 
         if nun_index is None:
             if verbose:
-                print(f"Skipping instance {instance_index}: no valid NUN found.")
+                logger.info("Skipping instance %d: no valid NUN found.", instance_index)
             return None
 
         return self._optimization(

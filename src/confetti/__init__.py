@@ -1,7 +1,7 @@
 from importlib.metadata import version, PackageNotFoundError
 
 try:
-    __version__ = version("confetti")
+    __version__ = version("confetti-ts")
 except PackageNotFoundError:
     __version__ = "0.0.0"
 

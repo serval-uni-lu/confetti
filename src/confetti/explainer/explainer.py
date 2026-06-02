@@ -2,6 +2,7 @@ from confetti.errors import CONFETTIConfigurationError, CONFETTIError, CONFETTID
 from confetti.explainer._counterfactual_problem import CounterfactualProblem
 from confetti.structs import Counterfactual, CounterfactualSet, CounterfactualResults
 
+import logging
 import time
 from typing import Optional, List, Tuple
 import warnings
@@ -21,6 +22,8 @@ from confetti.algorithm.sampling import BinaryRandomSampling
 
 from multiprocessing import Pool
 from functools import partial
+
+logger = logging.getLogger(__name__)
 
 
 def _load_model(model_path: str):
@@ -324,7 +327,7 @@ class CONFETTI:
 
         # Initialize values
         if verbose:
-            print(f"Naive stage started for instance {instance_index}")
+            logger.info("Naive stage started for instance %d", instance_index)
 
         if self.weights is None:
             raise CONFETTIError(
@@ -374,7 +377,7 @@ class CONFETTI:
         )
 
         if verbose:
-            print(f"Naive stage finished for instance {instance_index}")
+            logger.info("Naive stage finished for instance %d", instance_index)
 
         counterfactual: Counterfactual = Counterfactual(
             counterfactual=perturbed_instance_reshaped,
@@ -473,13 +476,13 @@ class CONFETTI:
         high = subsequence_length
         low = 1
         if verbose:
-            print(f"Optimization of CE for Instance {instance_index} started.")
+            logger.info("Optimization of CE for Instance %d started.", instance_index)
 
         while low <= high:
             start_time = time.time()
             window = (low + high) // 2
             if verbose:
-                print(f"Optimization of CE for Instance {instance_index} in Window {window}")
+                logger.info("Optimization of CE for Instance %d in Window %d", instance_index, window)
 
             # Timestep where it starts
             if self.weights is None:
@@ -548,9 +551,9 @@ class CONFETTI:
                 high = window - 1
             final_time = time.time() - start_time
             if verbose:
-                print(f"Instance: {instance_index} | Window: {window} | Time: {final_time}")
+                logger.info("Instance: %d | Window: %d | Time: %.2f", instance_index, window, final_time)
         if verbose:
-            print(f"Optimization of CE for Instance {instance_index} finished.")
+            logger.info("Optimization of CE for Instance %d finished.", instance_index)
 
         if not objective_values:
             return None
@@ -645,8 +648,8 @@ class CONFETTI:
 
         if self.weights is None:
             if verbose:
-                print("No feature weights were found. Skipping naive stage.")
-                print(f"Optimization stage started for instance {test_instance}")
+                logger.info("No feature weights were found. Skipping naive stage.")
+                logger.info("Optimization stage started for instance %d", test_instance)
             counterfactual_set: None | CounterfactualSet = self._optimization(
                 instance_index=test_instance,
                 nun_index=nun_index,
@@ -676,8 +679,8 @@ class CONFETTI:
                 verbose=verbose,
             )
             if verbose:
-                print(f"Naive stage finished for instance {test_instance}")
-                print(f"Optimization stage started for instance {test_instance}")
+                logger.info("Naive stage finished for instance %d", test_instance)
+                logger.info("Optimization stage started for instance %d", test_instance)
 
             optimized: None | CounterfactualSet = self._optimization(
                 instance_index=test_instance,
@@ -871,7 +874,7 @@ class CONFETTI:
 
         if results is None:
             if verbose:
-                print("No counterfactuals were generated.")
+                logger.info("No counterfactuals were generated.")
             return None
         else:
             if save_counterfactuals:
@@ -918,8 +921,6 @@ class CONFETTI:
             All counterfactual sets from parallel execution.
         """
 
-        pool = Pool(processes=processes)
-
         wrapped_one_pass = partial(
             self._one_pass,
             alpha=alpha,
@@ -937,15 +938,13 @@ class CONFETTI:
             verbose=verbose,
         )
 
-        results = pool.map(wrapped_one_pass, range(len(self.instances_to_explain)))
-        pool.close()
-        pool.join()
+        with Pool(processes=processes) as pool:
+            results = pool.map(wrapped_one_pass, range(len(self.instances_to_explain)))
 
         self.counterfactual_sets: List[CounterfactualSet] = []
 
         for r in results:
             counterfactual_set: CounterfactualSet = r
-            # self.nuns.append(nun)
             if counterfactual_set is not None:
                 self.counterfactual_sets.append(counterfactual_set)
 
@@ -999,7 +998,7 @@ class CONFETTI:
             )
             if nun_index is None:
                 if verbose:
-                    print(f"Skipping instance {instance_index}: No valid NUN found.")
+                    logger.info("Skipping instance %d: No valid NUN found.", instance_index)
                 continue
 
             if self.weights is not None:
@@ -1012,7 +1011,7 @@ class CONFETTI:
 
                 if naive is None:
                     if verbose:
-                        print(f"Skipping instance {instance_index}: No valid naive counterfactual found.")
+                        logger.info("Skipping instance %d: No valid naive counterfactual found.", instance_index)
                     continue
 
                 optimized: None | CounterfactualSet = self._optimization(
@@ -1047,7 +1046,7 @@ class CONFETTI:
                     counterfactual_sets.append(counterfactual_set)
             else:
                 if verbose:
-                    print("Skipping Naive Stage as no weights were provided.")
+                    logger.info("Skipping Naive Stage as no weights were provided.")
 
                 optimized: None | CounterfactualSet = self._optimization(
                     instance_index=instance_index,
@@ -1072,7 +1071,7 @@ class CONFETTI:
                     counterfactual_sets.append(optimized)
                 else:
                     if verbose:
-                        print(f"No valid optimized counterfactual found for instance {instance_index}.")
+                        logger.info("No valid optimized counterfactual found for instance %d.", instance_index)
                     continue
 
         if counterfactual_sets:

@@ -1,10 +1,14 @@
 from dataclasses import dataclass
+import logging
 from typing import List, Union, Optional
 import pandas as pd
 import numpy as np
 from confetti.errors import CONFETTIError, CONFETTIDataTypeError
 from confetti.utils import array_to_string
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
 
 
 @dataclass
@@ -215,7 +219,7 @@ class CounterfactualSet:
                 lambda x: array_to_string(x) if isinstance(x, np.ndarray) else None
             )
         df.to_csv(output_path, index=False)
-        print(f"Counterfactuals exported to {output_path}")
+        logger.info("Counterfactuals exported to %s", output_path)
 
     @staticmethod
     def _validate_dtypes(
@@ -376,4 +380,4 @@ class CounterfactualResults:
         df["original_instance"] = df["original_instance"].apply(array_to_string)
         df["nearest_unlike_neighbour"] = df["nearest_unlike_neighbour"].apply(array_to_string)
         df.to_csv(output_path, index=False)
-        print(f"All counterfactuals exported to {output_path}")
+        logger.info("All counterfactuals exported to %s", output_path)
