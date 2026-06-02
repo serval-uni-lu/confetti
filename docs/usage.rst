@@ -1,6 +1,10 @@
 Usage
 =====
 
+.. note::
+   This page covers **time-series** counterfactual generation.
+   For tabular data, see :doc:`tabular_usage`.
+
 This page describes how to use CONFETTI to generate counterfactual
 explanations for multivariate time series.
 
@@ -77,6 +81,8 @@ To generate counterfactual explanations, you need:
         theta=0.51,
     )
 
+.. _interpreting-the-output:
+
 Interpreting the Output
 -----------------------
 
@@ -145,4 +151,6 @@ was flipped.
 Further Reading
 ---------------
 
-For a runnable end-to-end example, see the :doc:`example` page.
+- :doc:`example` — runnable end-to-end time-series example
+- :doc:`tabular_usage` — tabular counterfactual generation
+- :doc:`constraints` — inter-feature relational constraints

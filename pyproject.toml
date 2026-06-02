@@ -4,12 +4,12 @@ build-backend = "maturin"
 
 [project]
 name = "confetti-ts"
-version = "0.1.1"
-description = "A multi-objective counterfactual explanation method for deep learning based multivariate time series classifiers."
+version = "0.2.0"
+description = "A multi-objective counterfactual explanation method for time series and tabular classifiers."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-keywords = ["counterfactual explanations", "time series", "multi-objective optimization", "deep learning"]
+keywords = ["counterfactual explanations", "time series", "tabular", "multi-objective optimization", "deep learning"]
 authors = [
   {name = "Alan Paredes Cetina", email = "alan.paredes@uni.lu"},
   {name = "Raoni Lourenco", email = "raoni.lourenco@uni.lu"},

@@ -32,27 +32,28 @@
 ![CONFETTI Logo](https://raw.githubusercontent.com/serval-uni-lu/confetti/main/docs/artwork/confetti-logo.png)
 
 ---
-# Counterfactual Explanations for Multivariate Time Series
+# Counterfactual Explanations for Time Series and Tabular Data
 
 
 
-**CONFETTI** is a multi-objective method for generating **counterfactual explanations for multivariate time series**. 
-It identifies the most influential subsequences, constructs a minimal perturbation, and optimizes it under multiple objectives to produce **sparse**, **realistic**, and **confidence-increasing** counterfactuals 
+**CONFETTI** is a multi-objective method for generating **counterfactual explanations** for **multivariate time series** and **tabular data** classifiers.
+It identifies the most influential features or temporal regions, constructs a minimal perturbation, and optimizes it under multiple objectives to produce **sparse**, **realistic**, and **confidence-increasing** counterfactuals.
 
-CONFETTI is model-agnostic and works with **any deep learning classifier**, differentiable or not.
+CONFETTI is model-agnostic and works with **any classifier** — Keras, PyTorch, or scikit-learn.
 
 --- 
 ## ✨ Highlights
 
-* Multi-objective optimization using NSGA-III
-* Works for any **Keras/Scikit-learn** multivariate time series classifier
-* Optional use of **class activation maps** for feature-weighted perturbations
+* Multi-objective optimization using **NSGA-III**
+* **Time series**: works with any Keras/scikit-learn multivariate time series classifier
+* **Tabular data**: works with any classifier exposing `predict_proba` or `predict`
+* **Relation constraints for tabular data**: encode domain rules on counterfactuals (e.g. `age <= retirement_age`)
+* **Rust-accelerated** backend for distances, NSGA-III, and constraint evaluation
+* Optional use of **class activation maps** for feature-weighted perturbations (time series)
+* Built-in distance metrics: Euclidean, Manhattan, DTW, Soft-DTW, GAK, CTW, Gower
+* Support for **categorical features**, **immutable features**, and **Gower distance** for mixed-type data
 * Generates multiple diverse counterfactuals per instance
 * Parallelized counterfactual generation
-* Built-in utilities for:
-  * loading datasets
-  * computing CAM weights
-  * visualizing counterfactual explanations
 
 ---
 ## 🚀 Installation
@@ -72,21 +73,23 @@ source .venv/bin/activate
 uv pip install -e .
 ```
 
-Requirements:
+Core dependencies:
 
 * Python 3.12+
-* NumPy, pandas
-* Keras 3.x
-* TensorFlow 
-* Pymoo
-* tslearn
+* NumPy, pandas, scikit-learn, joblib
+
+Optional:
+
+* Keras 3.x + TensorFlow (`pip install confetti-ts[keras]`)
+* PyTorch (`pip install confetti-ts[torch]`)
 
 All dependencies are handled automatically via ``pyproject.toml``.
 
 ---
 
-## ⚡ Quick Example
-Below is a minimal end-to-end example based on the ``demo_confetti.ipynb`` notebook.
+## ⚡ Quick Example — Time Series
+
+Below is a minimal end-to-end example for multivariate time series counterfactuals.
 It loads a trained model, prepares a dataset, and generates counterfactuals for a single instance.
 
 ```python
@@ -138,17 +141,76 @@ In the visualization:
 * red curves represent the counterfactual subsequence
 * the heatmap corresponds to CAM scores of the nearest unlike neighbor
 
-The alignment between CAM activation and the altered subsequence shows how CONFETTI uses attribution to target meaningful areas of the time series.
+---
+
+## ⚡ Quick Example — Tabular Data
+
+Generate counterfactual explanations for tabular classifiers using `TabularCONFETTI`.
+
+```python
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from confetti import TabularCONFETTI, Feature
+
+# Prepare data
+df = pd.read_csv("data.csv")
+X = df.drop(columns=["target"])
+y = df["target"]
+
+# Train a classifier
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X, y)
+
+# Initialize explainer
+explainer = TabularCONFETTI(model)
+
+# Generate counterfactuals
+results = explainer.generate_counterfactuals(
+    instances_to_explain=X.iloc[:5],
+    reference_data=X,
+    alpha=0.5,
+    theta=0.51,
+)
+
+# Inspect the best counterfactual
+cf_set = results[0]
+print("Original label:     ", cf_set.original_label)
+print("Counterfactual label:", cf_set.best.label)
+print(results.to_dataframe())
+```
+
+You can also enforce domain constraints and protect immutable features:
+
+```python
+results = explainer.generate_counterfactuals(
+    instances_to_explain=X.iloc[:5],
+    reference_data=X,
+    immutable_features=["age", "gender"],
+    relation_constraints=[
+        Feature("years_employed") <= Feature("age") - 18,
+    ],
+)
+```
 
 ---
-## 📚Documentation
+## 🆕 What's New in v0.2.0
+
+* **TabularCONFETTI** — counterfactual explanations for tabular data with categorical feature support, immutable features, and Gower distance
+* **Relation constraints DSL** — composable inter-feature constraints (`<=`, `<`, `Equal`, `And`, `Or`, `Count`)
+* **Rust-accelerated backend** — distances (DTW, Soft-DTW, GAK, Manhattan), NSGA-III components, and constraint evaluation via PyO3
+* **Custom NSGA-III** — zero-dependency genetic algorithm (pymoo removed)
+* **Built-in distance metrics** — pure-numpy DTW, Soft-DTW, GAK, CTW, Gower, Manhattan (tslearn removed)
+* **PyTorch adapter** — use PyTorch models alongside Keras and scikit-learn
+
+---
+## 📚 Documentation
 
 The full documentation, including usage guides, API reference, and examples, is available at:
 
 👉 **https://confetti-ts.readthedocs.io/en/latest/**
 
 ---
-## 📄License
+## 📄 License
 
 CONFETTI is released under the [MIT License](LICENSE). 
 
@@ -171,6 +233,3 @@ If you use CONFETTI in your research, please consider citing the following paper
 To **replicate the experiments described in the paper**, use the **`paper` branch** of this
 repository. It contains the experiment scripts, model configurations, and dataset handling
 used in the publication.
-
-
-
