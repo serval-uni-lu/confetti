@@ -46,7 +46,14 @@ def _normalize_series(series: np.ndarray | Counterfactual, param_name: str) -> n
             hint="Ensure you pass a numpy array with shape (timesteps, channels) or (1, timesteps, channels) or a Counterfactual object.",
         )
     if isinstance(series, Counterfactual):
-        series = series.counterfactual
+        cf_data = series.counterfactual
+        if not isinstance(cf_data, np.ndarray):
+            raise CONFETTIDataTypeError(
+                message=f"{param_name} contains a DataFrame, but visualization is only supported for time-series (ndarray) counterfactuals.",
+                param=param_name,
+                hint="Use TabularCONFETTI results with your own plotting code. The visualizations module supports time-series CONFETTI only.",
+            )
+        series = cf_data
 
     if series.ndim == 2:
         # (timesteps, channels)
@@ -227,7 +234,7 @@ def plot_counterfactual(
             hint="Use the Counterfactual class from confetti.explainer.counterfactuals.",
         )
 
-    cf_array = _normalize_series(counterfactual.counterfactual, param_name="counterfactual.counterfactual")
+    cf_array = _normalize_series(counterfactual, param_name="counterfactual")
 
     if original_2d.shape != cf_array.shape:
         raise CONFETTIDataTypeError(

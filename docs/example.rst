@@ -246,7 +246,7 @@ Finally, we visualize the best counterfactual and optional CAM heatmap.
 
     plot_counterfactual(
         original=cf_set.original_instance,
-        counterfactual=cf_set.best.counterfactual,
+        counterfactual=cf_set.best,
         cam_weights=cf_set.feature_importance,
         cam_mode="heatmap",
         title="Counterfactual Explanation",
