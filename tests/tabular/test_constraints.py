@@ -19,8 +19,12 @@ from confetti.constraints import (
     MathOperation,
     Or,
     SafeDivision,
+    Value,
+    collect_features,
     repair_equality_constraints,
+    resolve_feature,
 )
+from confetti.constraints._evaluator import _BytecodeCompiler
 from confetti.errors import CONFETTIConfigurationError, CONFETTIDataTypeError
 from confetti.tabular._tabular_problem import TabularCounterfactualProblem
 
@@ -472,3 +476,264 @@ class TestValidation:
                 Feature("x") <= Constant(5),
                 feature_names=None,
             )
+
+
+# ---------------------------------------------------------------------------
+# T-6: Bytecode compiler coverage (exercises _evaluator.py compile paths)
+# ---------------------------------------------------------------------------
+
+
+class TestBytecodeCompiler:
+    def test_constant_in_constraint(self):
+        ev = ConstraintEvaluator(Feature(0) <= Constant(5))
+        result = ev.evaluate(np.array([[3.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_feature_by_name(self):
+        ev = ConstraintEvaluator(
+            Feature("a") <= Feature("b"),
+            feature_names=["a", "b"],
+        )
+        result = ev.evaluate(np.array([[3.0, 5.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_math_operation(self):
+        ev = ConstraintEvaluator((Feature(0) + Feature(1)) <= Constant(20))
+        result = ev.evaluate(np.array([[3.0, 5.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_safe_division(self):
+        ev = ConstraintEvaluator(
+            SafeDivision(Feature(0), Feature(1), Constant(-1)) <= Constant(10)
+        )
+        result = ev.evaluate(np.array([[10.0, 2.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_log_unsafe(self):
+        ev = ConstraintEvaluator(Log(Feature(0)) <= Constant(5))
+        result = ev.evaluate(np.array([[np.e]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_log_safe(self):
+        ev = ConstraintEvaluator(
+            Log(Feature(0), safe_value=Constant(0)) <= Constant(5)
+        )
+        result = ev.evaluate(np.array([[-1.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_count(self):
+        c1 = Feature(0) <= Feature(1)
+        c2 = Feature(1) <= Feature(2)
+        ev = ConstraintEvaluator(Count([c1, c2]) <= Constant(1))
+        result = ev.evaluate(np.array([[7.0, 5.0, 3.0]]))
+        assert result[0] > 0.0
+
+    def test_less(self):
+        ev = ConstraintEvaluator(Feature(0) < Feature(1))
+        result = ev.evaluate(np.array([[3.0, 5.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_equal_with_tolerance(self):
+        ev = ConstraintEvaluator(Equal(Feature(0), Feature(1), Constant(0.05)))
+        result = ev.evaluate(np.array([[3.01, 3.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_and_composite(self):
+        c1 = Feature(0) <= Feature(1)
+        c2 = Feature(1) <= Feature(2)
+        ev = ConstraintEvaluator(And([c1, c2]))
+        result = ev.evaluate(np.array([[1.0, 5.0, 10.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_or_composite(self):
+        c1 = Feature(0) <= Feature(1)
+        c2 = Feature(2) <= Feature(1)
+        ev = ConstraintEvaluator(Or([c1, c2]))
+        result = ev.evaluate(np.array([[3.0, 5.0, 10.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_many_sum(self):
+        ev = ConstraintEvaluator(
+            (Feature(0) + Feature(1) + Feature(2)) <= Constant(20)
+        )
+        result = ev.evaluate(np.array([[1.0, 2.0, 3.0]]))
+        assert result[0] == pytest.approx(0.0)
+
+    def test_unknown_node_type_raises(self):
+        class FakeNode(Value):
+            def _eval(self, data, names):
+                return data[:, 0]
+
+        compiler = _BytecodeCompiler(None)
+        with pytest.raises(CONFETTIDataTypeError, match="Cannot compile"):
+            compiler.compile(FakeNode())
+
+
+# ---------------------------------------------------------------------------
+# T-7: collect_features coverage (_validation.py)
+# ---------------------------------------------------------------------------
+
+
+class TestCollectFeatures:
+    def test_math_operation(self):
+        node = Feature(0) - Feature(1)
+        feats = collect_features(node)
+        ids = [f.feature_id for f in feats]
+        assert ids == [0, 1]
+
+    def test_safe_division(self):
+        node = SafeDivision(Feature(0), Feature(1), Feature(2))
+        feats = collect_features(node)
+        ids = [f.feature_id for f in feats]
+        assert ids == [0, 1, 2]
+
+    def test_many_sum(self):
+        node = Feature(0) + Feature(1) + Feature(2)
+        feats = collect_features(node)
+        ids = [f.feature_id for f in feats]
+        assert ids == [0, 1, 2]
+
+    def test_log_with_safe_value(self):
+        node = Log(Feature(0), safe_value=Constant(0))
+        feats = collect_features(node)
+        assert len(feats) == 1
+        assert feats[0].feature_id == 0
+
+    def test_count(self):
+        node = Count([Feature(0) <= Feature(1), Feature(2) <= Feature(3)])
+        feats = collect_features(node)
+        ids = [f.feature_id for f in feats]
+        assert ids == [0, 1, 2, 3]
+
+    def test_equal_with_tolerance(self):
+        node = Equal(Feature(0), Feature(1), tolerance=Feature(2))
+        feats = collect_features(node)
+        ids = [f.feature_id for f in feats]
+        assert ids == [0, 1, 2]
+
+    def test_and(self):
+        node = And([Feature(0) <= Feature(1), Feature(2) <= Feature(3)])
+        feats = collect_features(node)
+        ids = [f.feature_id for f in feats]
+        assert ids == [0, 1, 2, 3]
+
+    def test_or(self):
+        node = Or([Feature(0) <= Feature(1), Feature(2) <= Feature(3)])
+        feats = collect_features(node)
+        ids = [f.feature_id for f in feats]
+        assert ids == [0, 1, 2, 3]
+
+
+# ---------------------------------------------------------------------------
+# T-8: Relation __repr__ coverage (_relations.py)
+# ---------------------------------------------------------------------------
+
+
+class TestRelationRepr:
+    def test_less_repr(self):
+        r = repr(Feature(0) < Feature(1))
+        assert "Less" in r
+
+    def test_equal_repr(self):
+        r = repr(Equal(Feature(0), Feature(1), Constant(0.05)))
+        assert "Equal" in r
+        assert "tolerance" in r
+
+    def test_and_repr(self):
+        r = repr(And([Feature(0) <= Feature(1), Feature(1) <= Feature(2)]))
+        assert r.startswith("And(")
+
+    def test_or_repr(self):
+        r = repr(Or([Feature(0) <= Feature(1), Feature(1) <= Feature(2)]))
+        assert r.startswith("Or(")
+
+    def test_count_repr(self):
+        r = repr(Count([Feature(0) <= Feature(1), Feature(1) <= Feature(2)]))
+        assert "Count(" in r
+        assert "inverse=False" in r
+
+
+# ---------------------------------------------------------------------------
+# T-9: Or / And flattening (_relations.py)
+# ---------------------------------------------------------------------------
+
+
+class TestOrAndFlattening:
+    def test_or_flattening(self):
+        c1 = Feature(0) <= Feature(1)
+        c2 = Feature(1) <= Feature(2)
+        c3 = Feature(2) <= Feature(3)
+        result = (c1 | c2) | c3
+        assert isinstance(result, Or)
+        assert len(result.operands) == 3
+
+    def test_and_flattening(self):
+        c1 = Feature(0) <= Feature(1)
+        c2 = Feature(1) <= Feature(2)
+        c3 = Feature(2) <= Feature(3)
+        result = (c1 & c2) & c3
+        assert isinstance(result, And)
+        assert len(result.operands) == 3
+
+
+# ---------------------------------------------------------------------------
+# T-10: Value edge cases and repr (_values.py)
+# ---------------------------------------------------------------------------
+
+
+class TestValueEdgeCases:
+    def test_radd_on_manysum(self):
+        inner = Feature(0) + Feature(1)
+        result = 5 + inner
+        assert isinstance(result, ManySum)
+        assert len(result.operands) == 3
+        assert isinstance(result.operands[0], Constant)
+        assert result.operands[0].value == 5
+
+    def test_rtruediv(self):
+        result = 10 / Feature(0)
+        assert isinstance(result, MathOperation)
+        assert result.operator == "/"
+
+    def test_rpow(self):
+        result = 2 ** Feature(0)
+        assert isinstance(result, MathOperation)
+        assert result.operator == "**"
+
+    def test_rmod(self):
+        result = 7 % Feature(0)
+        assert isinstance(result, MathOperation)
+        assert result.operator == "%"
+
+    def test_unsupported_operator(self):
+        with pytest.raises(CONFETTIConfigurationError, match="Unsupported operator"):
+            MathOperation("@", Feature(0), Feature(1))
+
+    def test_feature_index_out_of_bounds(self):
+        with pytest.raises(CONFETTIConfigurationError, match="out of range"):
+            resolve_feature(99, None, 5)
+
+    def test_safe_division_repr(self):
+        r = repr(SafeDivision(Feature(0), Feature(1), Constant(0)))
+        assert "SafeDivision" in r
+
+    def test_many_sum_repr(self):
+        r = repr(Feature(0) + Feature(1))
+        assert r.startswith("ManySum(")
+
+    def test_log_repr(self):
+        r = repr(Log(Feature(0), safe_value=Constant(0)))
+        assert "Log(" in r
+        assert "safe_value=" in r
+
+    def test_coerce_invalid_type(self):
+        with pytest.raises(CONFETTIDataTypeError, match="Cannot coerce"):
+            Feature(0) + "string"
+
+    def test_resolve_string_without_names(self):
+        with pytest.raises(CONFETTIConfigurationError, match="no feature_names"):
+            resolve_feature("age", None, 5)
+
+    def test_resolve_name_not_found(self):
+        with pytest.raises(CONFETTIConfigurationError, match="not found"):
+            resolve_feature("missing", ["age"], 1)

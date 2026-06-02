@@ -89,3 +89,12 @@ class TestCdistCtw:
     def test_non_negative(self, batch_a, batch_b):
         result = cdist_ctw(batch_a, batch_b)
         assert np.all(result >= -1e-10)
+
+    def test_sakoe_chiba_constraint(self, batch_a, batch_b):
+        result = cdist_ctw(
+            batch_a, batch_b,
+            global_constraint="sakoe_chiba",
+            sakoe_chiba_radius=2,
+        )
+        assert result.shape == (3, 2)
+        assert np.all(result >= -1e-10)
