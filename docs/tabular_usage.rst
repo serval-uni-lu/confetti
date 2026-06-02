@@ -132,6 +132,53 @@ Immutable features are guaranteed to retain their original values and
 are excluded from the sparsity objective.
 
 
+Relation Constraints
+--------------------
+
+Use the ``relation_constraints`` parameter to enforce domain rules on
+generated counterfactuals.  Constraints are built from ``Feature``
+references, constants, and comparison operators.
+
+.. code-block:: python
+
+    from confetti import Feature
+
+    results = explainer.generate_counterfactuals(
+        instances_to_explain=instances,
+        reference_data=X_train,
+        relation_constraints=[
+            Feature("years_employed") <= Feature("age") - 18,
+            Feature("debt") <= Feature("income") * 0.4,
+        ],
+    )
+
+The GA treats constraint violations as inequality constraints, steering
+the search toward counterfactuals that satisfy all rules.  Constraints
+can be combined with ``&`` (all must hold) and ``|`` (at least one must
+hold), and ``Equal`` constraints with a single ``Feature`` on the left
+side are repaired in-place for faster convergence.
+
+Relation constraints compose freely with ``immutable_features`` — you
+can lock a feature and still reference it in constraints:
+
+.. code-block:: python
+
+    from confetti import Feature, Equal
+
+    results = explainer.generate_counterfactuals(
+        instances_to_explain=instances,
+        reference_data=X_train,
+        immutable_features=["age"],
+        relation_constraints=[
+            Feature("years_employed") <= Feature("age") - 18,
+            Equal(Feature("total_income"), Feature("salary") + Feature("bonus")),
+        ],
+    )
+
+See :doc:`constraints` for the full constraint DSL reference, including
+``SafeDivision``, ``Log``, ``ManySum``, ``Count``, and more.
+
+
 Proximity Metrics
 -----------------
 

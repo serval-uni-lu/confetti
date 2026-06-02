@@ -1,4 +1,4 @@
-Example
+Time Series Example
 ========
 
 .. note::

@@ -35,7 +35,7 @@ Features
 - 🎯 Multi-objective counterfactual generation using NSGA-III
 - 📊 **Time series**: works with any Keras or scikit-learn multivariate time series classifier
 - 📋 **Tabular data**: works with any classifier exposing ``predict_proba`` or ``predict``
-- 🔗 **Relation constraints**: enforce domain rules on counterfactuals (e.g. ``age <= retirement_age``)
+- 🔗 **Relation constraints on tabular data**: enforce domain rules on counterfactuals (e.g. ``age <= retirement_age``)
 - 🔥 Optional use of CAMs for feature-weighted perturbations (time series)
 - ⚡ Rust-accelerated backend for distances, NSGA-III, and constraint evaluation
 - 🧪 Generates multiple diverse counterfactuals per instance

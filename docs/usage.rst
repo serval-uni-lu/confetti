@@ -1,4 +1,4 @@
-Usage
+Time Series Usage
 =====
 
 .. note::

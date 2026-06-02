@@ -177,15 +177,91 @@ repaired in-place on counterfactuals before objective computation.
 This means the GA will directly set the feature value to satisfy the
 equality, rather than relying solely on evolutionary pressure.
 
+End-to-End Example
+------------------
 
-Performance
------------
+The following example ties together several constraint types in a
+realistic loan-approval scenario.  The dataset has features ``age``,
+``years_employed``, ``income``, ``debt``, and ``education_years``.
 
-When the compiled Rust backend is available, constraint evaluation is
-automatically accelerated using the Rust extension with Rayon
-parallelism.  No configuration is needed — the system detects and uses
-the Rust backend transparently.  A pure-Python fallback is used when
-the extension is not installed.
+.. code-block:: python
+
+    from confetti import (
+        Feature,
+        Constant,
+        Equal,
+        SafeDivision,
+        Log,
+        TabularCONFETTI,
+    )
+
+    # --- Value expressions ------------------------------------------------
+    age = Feature("age")
+    years_employed = Feature("years_employed")
+    income = Feature("income")
+    debt = Feature("debt")
+    education_years = Feature("education_years")
+
+    # --- Constraints ------------------------------------------------------
+
+    # 1. Years employed cannot exceed age minus 18
+    c_employment = years_employed <= age - 18
+
+    # 2. Debt-to-income ratio must stay below 40 %
+    #    Use SafeDivision to avoid errors when income is zero.
+    dti = SafeDivision(debt, income, Constant(0))
+    c_dti = dti <= Constant(0.4)
+
+    # 3. Education years + years employed cannot exceed age minus 5
+    c_timeline = education_years + years_employed <= age - 5
+
+    # 4. Log-income must be at least 9.2 (≈ $10k)
+    c_min_income = Constant(9.2) <= Log(income, safe_value=Constant(0))
+
+    # 5. Total experience must equal education + employment (equality repair)
+    total_experience = Feature("total_experience")
+    c_total = Equal(total_experience, education_years + years_employed)
+
+    # --- Combine with & / | ----------------------------------------------
+
+    # All constraints must hold simultaneously
+    all_constraints = [c_employment, c_dti, c_timeline, c_min_income, c_total]
+
+    # Alternatively, combine a subset with Or:
+    #   "either debt is below 40 % of income OR income is above 60k"
+    c_flexible = c_dti | (Constant(60_000) <= income)
+
+    # --- Generate counterfactuals -----------------------------------------
+
+    explainer = TabularCONFETTI(model)
+
+    results = explainer.generate_counterfactuals(
+        instances_to_explain=instances,
+        reference_data=X_train,
+        immutable_features=["age"],          # age cannot change
+        relation_constraints=all_constraints, # all rules enforced
+    )
+
+    # Inspect the best counterfactual
+    cf = results[0].best.counterfactual
+    print(cf)
+
+Key points illustrated above:
+
+- **Arithmetic composition**: ``education_years + years_employed``
+  builds a ``MathOperation`` that can be used inside constraints or
+  wrapped in ``Equal`` for repair.
+- **SafeDivision**: avoids division-by-zero in the debt-to-income
+  ratio without crashing the GA.
+- **Log**: lets you express constraints in log-space (e.g. minimum
+  income thresholds).
+- **Equal + repair**: ``c_total`` is automatically repaired in-place
+  because its left operand is a single ``Feature``.
+- **Immutable + constraints**: ``age`` is locked, but still referenced
+  in ``c_employment`` and ``c_timeline`` — the GA reads its value
+  without modifying it.
+- **Or combinator**: ``c_flexible`` shows how to express "at least one
+  of these must hold."
 
 
 API Reference
