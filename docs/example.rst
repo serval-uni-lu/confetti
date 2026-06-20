@@ -189,8 +189,10 @@ Lets visualize the instance we want to explain.
 
 .. code-block:: python
 
+    from confetti.visualizations import plot_time_series
+
     instance = X_test[0:1]
-    plot_time_series(series=instance_to_explain, title="Instance to Explain")
+    plot_time_series(series=instance, title="Instance to Explain")
 
 .. image:: _static/instance_to_explain.png
    :alt: Instance to Explain

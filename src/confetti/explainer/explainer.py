@@ -634,6 +634,7 @@ class CONFETTI:
             query=self.instances_to_explain[test_instance],
             predicted_label=self.original_labels[test_instance].item(),
             distance=proximity_distance,
+            dtw_window=dtw_window,
             n_neighbors=1,
             theta=theta,
         )
@@ -989,6 +990,7 @@ class CONFETTI:
                 query=self.instances_to_explain[instance_index],
                 predicted_label=self.original_labels[instance_index].item(),
                 distance=proximity_distance,
+                dtw_window=dtw_window,
                 n_neighbors=1,
                 theta=theta,
             )
@@ -1038,6 +1040,7 @@ class CONFETTI:
                         nearest_unlike_neighbour=self.reference_data[nun_index],
                         best_solution=naive,
                         all_counterfactuals=[naive],
+                        feature_importance=self.weights[nun_index] if self.weights is not None else None,
                     )
                     counterfactual_sets.append(counterfactual_set)
             else:

@@ -50,7 +50,7 @@ class BitflipMutation(Mutation):
         np.ndarray
             Mutated population with the same shape and dtype as ``X``.
         """
-        prob_var = self.get_prob_var(problem, size=(len(X), 1))
+        prob_var = self.get_prob_var(problem)
         Xp = np.copy(X)
         flip = np.random.random(X.shape) < prob_var
         Xp[flip] = ~X[flip]

@@ -231,7 +231,7 @@ def plot_counterfactual(
         raise CONFETTIDataTypeError(
             message="counterfactual must be a Counterfactual object.",
             param="counterfactual",
-            hint="Use the Counterfactual class from confetti.explainer.counterfactuals.",
+            hint="Use the Counterfactual class from confetti.structs.",
         )
 
     cf_array = _normalize_series(counterfactual, param_name="counterfactual")

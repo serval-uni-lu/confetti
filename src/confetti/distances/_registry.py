@@ -47,5 +47,5 @@ def get_cdist_function(metric_name: str) -> Callable[..., Any]:
         message="The specified proximity distance metric is not supported.",
         param="proximity_distance",
         config={"proximity_distance": metric_name},
-        hint="Choose from 'euclidean', 'manhattan', 'dtw', 'ctw', 'softdtw', or 'gak'.",
+        hint="Choose from 'manhattan', 'dtw', 'ctw', 'softdtw', or 'gak'.",
     )
