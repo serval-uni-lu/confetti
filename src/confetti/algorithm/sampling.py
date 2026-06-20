@@ -14,15 +14,12 @@ class BinaryRandomSampling(Sampling):
     Generate an initial population of binary decision vectors.
 
     Each variable in each individual is drawn independently from a
-    Bernoulli(0.5) distribution.  This is a drop-in replacement for
-    ``pymoo.operators.sampling.rnd.BinaryRandomSampling``.
+    Bernoulli(0.5) distribution.
 
     Parameters
     ----------
     ``seed`` : int or None, default=None
-        Seed for the internal ``numpy.random.Generator``.  When *None*,
-        the global numpy random state is used for backwards compatibility
-        with pymoo's seeding mechanism (``minimize(..., seed=...)``).
+        Seed for the internal ``numpy.random.Generator``.
 
     """
 

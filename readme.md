@@ -32,11 +32,11 @@
 ![CONFETTI Logo](https://raw.githubusercontent.com/serval-uni-lu/confetti/main/docs/artwork/confetti-logo.png)
 
 ---
-# Counterfactual Explanations for Time Series and Tabular Data
+# Counterfactual Explanations for Time Series
 
 
 
-**CONFETTI** is a multi-objective method for generating **counterfactual explanations** for **multivariate time series** and **tabular data** classifiers.
+**CONFETTI** is a multi-objective method for generating **counterfactual explanations** for **multivariate time series** classifiers.
 It identifies the most influential features or temporal regions, constructs a minimal perturbation, and optimizes it under multiple objectives to produce **sparse**, **realistic**, and **confidence-increasing** counterfactuals.
 
 CONFETTI is model-agnostic and works with **any classifier** — Keras, PyTorch, or scikit-learn.
@@ -46,12 +46,9 @@ CONFETTI is model-agnostic and works with **any classifier** — Keras, PyTorch,
 
 * Multi-objective optimization using **NSGA-III**
 * **Time series**: works with any Keras/scikit-learn multivariate time series classifier
-* **Tabular data**: works with any classifier exposing `predict_proba` or `predict`
-* **Relation constraints for tabular data**: encode domain rules on counterfactuals (e.g. `age <= retirement_age`)
-* **Rust-accelerated** backend for distances, NSGA-III, and constraint evaluation
-* Optional use of **class activation maps** for feature-weighted perturbations (time series)
-* Built-in distance metrics: Euclidean, Manhattan, DTW, Soft-DTW, GAK, CTW, Gower
-* Support for **categorical features**, **immutable features**, and **Gower distance** for mixed-type data
+* **Rust-accelerated** backend for distances and NSGA-III
+* Optional use of **class activation maps** for feature-weighted perturbations
+* Built-in distance metrics: Euclidean, Manhattan, DTW, Soft-DTW, GAK, CTW
 * Generates multiple diverse counterfactuals per instance
 * Parallelized counterfactual generation
 
@@ -142,64 +139,11 @@ In the visualization:
 * the heatmap corresponds to CAM scores of the nearest unlike neighbor
 
 ---
-
-## ⚡ Quick Example — Tabular Data
-
-Generate counterfactual explanations for tabular classifiers using `TabularCONFETTI`.
-
-```python
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from confetti import TabularCONFETTI, Feature
-
-# Prepare data
-df = pd.read_csv("data.csv")
-X = df.drop(columns=["target"])
-y = df["target"]
-
-# Train a classifier
-model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X, y)
-
-# Initialize explainer
-explainer = TabularCONFETTI(model)
-
-# Generate counterfactuals
-results = explainer.generate_counterfactuals(
-    instances_to_explain=X.iloc[:5],
-    reference_data=X,
-    alpha=0.5,
-    theta=0.51,
-)
-
-# Inspect the best counterfactual
-cf_set = results[0]
-print("Original label:     ", cf_set.original_label)
-print("Counterfactual label:", cf_set.best.label)
-print(results.to_dataframe())
-```
-
-You can also enforce domain constraints and protect immutable features:
-
-```python
-results = explainer.generate_counterfactuals(
-    instances_to_explain=X.iloc[:5],
-    reference_data=X,
-    immutable_features=["age", "gender"],
-    relation_constraints=[
-        Feature("years_employed") <= Feature("age") - 18,
-    ],
-)
-```
-
----
 ## 🆕 What's New in v0.2.0
 
-* **TabularCONFETTI** — counterfactual explanations for tabular data with categorical feature support, immutable features, and Gower distance
-* **Relation constraints DSL** — composable inter-feature constraints (`<=`, `<`, `Equal`, `And`, `Or`, `Count`)
-* **Rust-accelerated backend** — distances (DTW, Soft-DTW, GAK, Manhattan), NSGA-III components, and constraint evaluation via PyO3
-* **Custom NSGA-III** — zero-dependency genetic algorithm (pymoo removed)
-* **Built-in distance metrics** — pure-numpy DTW, Soft-DTW, GAK, CTW, Gower, Manhattan (tslearn removed)
+* **Rust-accelerated backend** — distances (DTW, Soft-DTW, GAK, Manhattan) and NSGA-III components via PyO3
+* **Custom NSGA-III** — zero-dependency genetic algorithm 
+* **Built-in distance metrics** — pure-numpy DTW, Soft-DTW, GAK, CTW, Manhattan 
 * **PyTorch adapter** — use PyTorch models alongside Keras and scikit-learn
 
 ---

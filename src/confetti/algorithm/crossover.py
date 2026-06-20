@@ -20,8 +20,6 @@ class TwoPointCrossover(Crossover):
     * Offspring 0: ``parent_0[:i]  | parent_1[i:j] | parent_0[j:]``
     * Offspring 1: ``parent_1[:i]  | parent_0[i:j] | parent_1[j:]``
 
-    This is a drop-in replacement for
-    ``pymoo.operators.crossover.pntx.TwoPointCrossover``.
 
     Parameters
     ----------

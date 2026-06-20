@@ -100,7 +100,6 @@ class NSGA3:
         # Apply survival on initial population
         X, F, G = self._survive(X, F, G, self.pop_size, norm, rng)
 
-        # pymoo counts the initial population as generation 1
         self.n_gen = 1
 
         # --- Evolutionary loop ---
@@ -146,7 +145,7 @@ class NSGA3:
 
         # Non-dominated sorting (using CV-adjusted objectives)
         # Infeasible solutions are penalised by appending CV as an extra axis
-        # for dominance comparison, matching pymoo's comp_by_cv approach.
+        # for dominance comparison
         F_sort = _cv_adjusted_objectives(F, cv)
         fronts = fast_non_dominated_sort(F_sort)
 
@@ -268,8 +267,6 @@ def minimize(
 ) -> Result:
     """
     Run an NSGA-III optimisation.
-
-    Drop-in replacement for ``pymoo.optimize.minimize``.
 
     Parameters
     ----------

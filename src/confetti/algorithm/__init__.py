@@ -1,8 +1,5 @@
 """
 CONFETTI's own NSGA-III genetic algorithm.
-
-This package replaces pymoo with hand-rolled implementations, paving
-the way for an eventual Rust / PyO3 backend.
 """
 
 from confetti.algorithm._nsga3 import NSGA3, Result, minimize

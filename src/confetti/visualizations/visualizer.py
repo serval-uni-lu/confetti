@@ -49,9 +49,9 @@ def _normalize_series(series: np.ndarray | Counterfactual, param_name: str) -> n
         cf_data = series.counterfactual
         if not isinstance(cf_data, np.ndarray):
             raise CONFETTIDataTypeError(
-                message=f"{param_name} contains a DataFrame, but visualization is only supported for time-series (ndarray) counterfactuals.",
+                message=f"{param_name} contains a DataFrame, but visualization requires ndarray counterfactuals.",
                 param=param_name,
-                hint="Use TabularCONFETTI results with your own plotting code. The visualizations module supports time-series CONFETTI only.",
+                hint="The visualizations module supports time-series (ndarray) counterfactuals only.",
             )
         series = cf_data
 

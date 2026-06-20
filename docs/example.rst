@@ -1,8 +1,5 @@
-Time Series Example
+Example
 ========
-
-.. note::
-   For a tabular data example, see :doc:`tabular_example`.
 
 Counterfactual explanations offer an intuitive way to explore how a model’s
 prediction could change under minimal modifications of the input. Given an

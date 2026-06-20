@@ -1,9 +1,5 @@
-Time Series Usage
+Usage
 =====
-
-.. note::
-   This page covers **time-series** counterfactual generation.
-   For tabular data, see :doc:`tabular_usage`.
 
 This page describes how to use CONFETTI to generate counterfactual
 explanations for multivariate time series.
@@ -151,6 +147,4 @@ was flipped.
 Further Reading
 ---------------
 
-- :doc:`example` — runnable end-to-end time-series example
-- :doc:`tabular_usage` — tabular counterfactual generation
-- :doc:`constraints` — inter-feature relational constraints
+- :doc:`example` — runnable end-to-end example

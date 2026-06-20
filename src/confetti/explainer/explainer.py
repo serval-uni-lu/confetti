@@ -785,8 +785,8 @@ class CONFETTI:
             Whether to include proximity minimization as an optimization
             objective.
         proximity_distance : str, default="euclidean"
-            Distance metric for proximity. Supported metrics include
-            Euclidean and several tslearn-based time-series distances.
+            Distance metric for proximity. Supported metrics are
+            [`euclidean`, `manhattan`, `dtw`, `soft_dtw`, `ctw`, `gak`].
         dtw_window : int or None, default=None
             Sakoe–Chiba radius for DTW proximity. If None, no warping
             constraint is applied.
@@ -810,8 +810,7 @@ class CONFETTI:
         -----
         CONFETTI includes built-in time-series distance metrics (DTW, Soft-DTW,
         CTW, GAK, Manhattan) implemented in pure NumPy with optional Rust
-        acceleration via ``confetti._rust_core``. No external distance library
-        is required.
+        acceleration.
 
         - When a non-Euclidean proximity metric is selected (e.g.,
           ``proximity_distance="dtw"``), the proximity objective computes pairwise
@@ -819,9 +818,6 @@ class CONFETTI:
           corresponding built-in metric.
         - DTW can optionally use a Sakoe–Chiba band via ``dtw_window`` for faster
           and more constrained alignment.
-        - If the Rust extension is available, distance computations are
-          parallelised with Rayon; otherwise the pure-NumPy fallback is used
-          transparently.
         """
 
         if processes is not None:
@@ -1136,10 +1132,7 @@ class CONFETTI:
 
         Note
         -----
-        Confidence is maximized while sparsity is minimized. However, in Pymoo's implementation, to maximize
-        an objective you need to set it to negative. (e.g. f1 = -confidence, f2 = sparsity). Thus, confidence in
-        objective values will appear as negative while sparsity as positive.
-        Therefore, it is necessary to first flip confidence so both objectives are higher-is-better before applying weights.
+        Confidence is maximized while sparsity is minimized.
 
         """
 

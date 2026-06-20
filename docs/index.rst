@@ -8,12 +8,12 @@
    :align: center
    :class: only-dark
 
-Counterfactual Explanations for Time Series and Tabular Data
+Counterfactual Explanations for Time Series
 ====================================================================
 
 
 **CONFETTI** is a multi-objective method for generating **counterfactual explanations** for
-**multivariate time series** and **tabular data** classifiers.
+**multivariate time series** classifiers.
 It identifies the most influential features or temporal regions, constructs a minimal perturbation
 using the nearest unlike neighbour (NUN), and optimizes it under multiple objectives to produce
 explanations that are **sparse**, **realistic**, and **confidence-increasing**.
@@ -34,9 +34,7 @@ Features
 - 🐍 Compatible with Python 3.12+
 - 🎯 Multi-objective counterfactual generation using NSGA-III
 - 📊 **Time series**: works with any Keras or scikit-learn multivariate time series classifier
-- 📋 **Tabular data**: works with any classifier exposing ``predict_proba`` or ``predict``
-- 🔗 **Relation constraints on tabular data**: enforce domain rules on counterfactuals (e.g. ``age <= retirement_age``)
-- 🔥 Optional use of CAMs for feature-weighted perturbations (time series)
+- 🔥 Optional use of CAMs for feature-weighted perturbations
 - ⚡ Rust-accelerated backend for distances, NSGA-III, and constraint evaluation
 - 🧪 Generates multiple diverse counterfactuals per instance
 - ⚙️ Parallelized counterfactual generation
@@ -57,9 +55,6 @@ CONFETTI is released under the terms of the MIT License.
 
    usage
    example
-   tabular_usage
-   tabular_example
-   constraints
    api/index
 
 Citing CONFETTI

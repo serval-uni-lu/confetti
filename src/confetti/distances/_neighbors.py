@@ -1,4 +1,4 @@
-"""KNN for time series, replacing tslearn.neighbors.KNeighborsTimeSeries."""
+"""KNN for time series"""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ class TimeSeriesKNN:
     """
     K-nearest-neighbors search for multivariate time series.
 
-    Drop-in replacement for ``tslearn.neighbors.KNeighborsTimeSeries``.
     For Euclidean distance the search is done via sklearn on flattened
     vectors.  For all other metrics a precomputed distance matrix is
     built with the corresponding ``cdist_*`` function.

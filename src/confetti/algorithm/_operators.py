@@ -83,7 +83,7 @@ class Mutation(ABC):
             Xp[mask] = self._do(problem, X[mask])
         return Xp
 
-    def get_prob_var(self, problem: Any, size: tuple[int, ...] | None = None) -> float:
+    def get_prob_var(self, problem: Any) -> float:
         """
         Return the per-variable mutation probability.
 
@@ -94,8 +94,6 @@ class Mutation(ABC):
         ----------
         ``problem`` : object
             Must expose an ``n_var`` attribute.
-        ``size`` : tuple or None
-            Ignored (kept for API compatibility with pymoo).
 
         Returns
         -------

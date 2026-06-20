@@ -21,7 +21,7 @@ class Counterfactual:
     """
 
     counterfactual: np.ndarray | pd.DataFrame
-    """The generated counterfactual (ndarray for time series, DataFrame for tabular)."""
+    """The generated counterfactual instance."""
 
     label: str | int | float
     """The predicted label corresponding to the counterfactual."""
@@ -276,7 +276,6 @@ class CounterfactualSet:
                 hint="Ensure that all entries are of type Counterfactual object.",
             )
 
-        # new validation for optional feature_importance
         if feature_importance is not None:
             if not isinstance(feature_importance, np.ndarray):
                 raise CONFETTIDataTypeError(

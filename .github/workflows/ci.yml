@@ -48,7 +48,7 @@ jobs:
           sccache: true
 
       - name: Run tests
-        run: uv run pytest tests/genetic_algorithm/ tests/distances/ tests/tabular/ -v --maxfail=3
+        run: uv run pytest tests/genetic_algorithm/ tests/distances/ -v --maxfail=3
 
   build:
     name: Build wheel (${{ matrix.os }}, ${{ matrix.target }})

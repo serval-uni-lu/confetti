@@ -1,5 +1,4 @@
 mod algorithm;
-mod constraints;
 mod distances;
 
 use pyo3::prelude::*;
@@ -23,13 +22,8 @@ fn _rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(distances::gak::gak, m)?)?;
     m.add_function(wrap_pyfunction!(distances::gak::unnormalized_gak_py, m)?)?;
     m.add_function(wrap_pyfunction!(distances::gak::cdist_gak, m)?)?;
-    m.add_function(wrap_pyfunction!(distances::gower::gower, m)?)?;
-    m.add_function(wrap_pyfunction!(distances::gower::cdist_gower, m)?)?;
     m.add_function(wrap_pyfunction!(distances::manhattan::manhattan, m)?)?;
     m.add_function(wrap_pyfunction!(distances::manhattan::cdist_manhattan, m)?)?;
-
-    // constraints
-    m.add_function(wrap_pyfunction!(constraints::evaluator::evaluate_constraints, m)?)?;
 
     // algorithm
     m.add_function(wrap_pyfunction!(algorithm::das_dennis::das_dennis_py, m)?)?;

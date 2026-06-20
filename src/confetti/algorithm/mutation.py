@@ -14,8 +14,7 @@ class BitflipMutation(Mutation):
     Flip individual bits of binary decision vectors.
 
     Each bit in every selected individual is independently flipped with
-    probability ``prob_var``.  This is a drop-in replacement for
-    ``pymoo.operators.mutation.bitflip.BitflipMutation``.
+    probability ``prob_var``.
 
     There are **two** probability knobs:
 
