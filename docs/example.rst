@@ -189,8 +189,10 @@ Lets visualize the instance we want to explain.
 
 .. code-block:: python
 
+    from confetti.visualizations import plot_time_series
+
     instance = X_test[0:1]
-    plot_time_series(series=instance_to_explain, title="Instance to Explain")
+    plot_time_series(series=instance, title="Instance to Explain")
 
 .. image:: _static/instance_to_explain.png
    :alt: Instance to Explain
@@ -243,7 +245,7 @@ Finally, we visualize the best counterfactual and optional CAM heatmap.
 
     plot_counterfactual(
         original=cf_set.original_instance,
-        counterfactual=cf_set.best.counterfactual,
+        counterfactual=cf_set.best,
         cam_weights=cf_set.feature_importance,
         cam_mode="heatmap",
         title="Counterfactual Explanation",
@@ -259,3 +261,165 @@ The green curves represent the original instance across all channels, while the 
 The heatmap at the bottom corresponds to the class activation map (CAM) of the nearest unlike neighbor (NUN), which indicates the time region the model relies on most when predicting the *new* class.
 CONFETTI uses this CAM as a guide, focusing its perturbation on the segment most responsible for distinguishing the NUN’s class from the original.
 The alignment between the high-activation region in the CAM and the red counterfactual subsequence illustrates how the method leverages attribution to produce focused and meaningful counterfactual changes.
+
+
+------------------------------------------------------------
+Alternative: PyTorch Workflow
+------------------------------------------------------------
+
+CONFETTI also supports PyTorch models via
+:class:`~confetti.adapters.TorchModelAdapter`. The sections below mirror
+the Keras walkthrough above, reusing the same toy dataset generated in
+Section 1.
+
+
+6a. Build a PyTorch Classifier
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The architecture mirrors the Keras ``ToyFCN``: three convolutional
+blocks (16 → 32 → 16 filters, kernel sizes 8 → 5 → 3) with batch
+normalization and ReLU, followed by global average pooling and a linear
+classifier with softmax output.
+
+PyTorch ``Conv1d`` expects **channels-first** input ``(N, C, T)``,
+whereas CONFETTI stores data as ``(N, T, C)``.
+:class:`~confetti.adapters.TorchModelAdapter` handles this permutation
+automatically.
+
+.. code-block:: python
+
+    import torch
+    import torch.nn as nn
+
+    class ToyFCN(nn.Module):
+
+        def __init__(self, in_channels=3, num_classes=2):
+            super().__init__()
+            self.conv1 = nn.Conv1d(in_channels, 16, kernel_size=8, padding="same")
+            self.bn1 = nn.BatchNorm1d(16)
+            self.conv2 = nn.Conv1d(16, 32, kernel_size=5, padding="same")
+            self.bn2 = nn.BatchNorm1d(32)
+            self.conv3 = nn.Conv1d(32, 16, kernel_size=3, padding="same")
+            self.bn3 = nn.BatchNorm1d(16)
+            self.classifier = nn.Linear(16, num_classes)
+
+        def forward(self, x):
+            x = torch.relu(self.bn1(self.conv1(x)))
+            x = torch.relu(self.bn2(self.conv2(x)))
+            x = torch.relu(self.bn3(self.conv3(x)))
+            x = x.mean(dim=-1)  # global average pooling over time
+            x = torch.softmax(self.classifier(x), dim=-1)
+            return x
+
+
+6b. Train and Save
+^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+    model = ToyFCN(in_channels=3, num_classes=2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.CrossEntropyLoss()
+
+    # Permute to channels-first for PyTorch
+    X_train_t = torch.tensor(X_train, dtype=torch.float32).permute(0, 2, 1)
+    y_train_t = torch.tensor(y_train, dtype=torch.long)
+
+    model.train()
+    for epoch in range(20):
+        optimizer.zero_grad()
+        logits = model(X_train_t)
+        loss = criterion(logits, y_train_t)
+        loss.backward()
+        optimizer.step()
+
+    # Save the full model (not just state_dict)
+    torch.save(model, "toy_fcn.pt")
+
+.. code-block:: text
+
+    Test accuracy: 1.000
+
+.. note::
+
+   ``torch.save(model, path)`` serializes the full model object.
+   CONFETTI’s internal loader (``_load_model``) uses
+   ``torch.load(path, weights_only=False)`` and wraps the result in a
+   ``TorchModelAdapter``, so the file **must** contain the complete
+   model—not just ``state_dict``.
+
+
+6c. Wrap with TorchModelAdapter
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+    from confetti import TorchModelAdapter
+
+    adapter = TorchModelAdapter(model)
+
+``TorchModelAdapter`` provides a ``.predict()`` method that accepts
+CONFETTI’s channels-last ``(N, T, C)`` arrays and returns class
+probabilities as a numpy array. By default ``channels_last=True``, so
+the adapter permutes inputs to ``(N, C, T)`` before calling the model.
+
+
+6d. CAM with PyTorch
+^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+    from confetti.attribution import cam
+
+    weights = cam(adapter, X_train)
+
+The ``cam()`` function supports both Keras and PyTorch models. In the
+Keras example (Section 4), a raw ``keras.Model`` was passed; here we
+pass the ``TorchModelAdapter``. Internally, CONFETTI uses forward hooks
+on ``Conv1d`` and ``Linear`` layers to capture activations and
+classifier weights.
+
+
+6e. Generate Counterfactuals
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+    from confetti import CONFETTI
+
+    explainer = CONFETTI(model_path="toy_fcn.pt")
+
+    results = explainer.generate_counterfactuals(
+        instances_to_explain=instance,
+        reference_data=X_train,
+        reference_weights=weights,
+        alpha=0.5,
+        theta=0.51,
+    )
+
+    cf_set = results[0]
+    print("Original label:     ", cf_set.original_label)
+    print("Counterfactual label:", cf_set.best.label)
+    print("Total generated:     ", len(cf_set.all_counterfactuals))
+
+When ``CONFETTI`` receives a ``.pt`` or ``.pth`` model path it
+automatically loads the model with ``torch.load`` and wraps it in a
+``TorchModelAdapter``—no manual wrapping is needed for the explainer.
+
+
+6f. Visualize
+^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+    from confetti.visualizations import plot_counterfactual
+
+    plot_counterfactual(
+        original=cf_set.original_instance,
+        counterfactual=cf_set.best,
+        cam_weights=cf_set.feature_importance,
+        cam_mode="heatmap",
+        title="Counterfactual Explanation (PyTorch)",
+    )
+
+The visualization API is identical regardless of framework.

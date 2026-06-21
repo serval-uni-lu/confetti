@@ -37,7 +37,7 @@ Basic Workflow
 
 To generate counterfactual explanations, you need:
 
-- a **path to a trained model** (Keras ``.keras`` or joblib ``.joblib``)
+- a **path to a trained model** (Keras ``.keras``, PyTorch ``.pt``/``.pth``, or joblib ``.joblib``)
 - one or more **instances to explain** shaped
   ``(n_instances, time_steps, n_features)``
 - a **reference dataset** in the same format
@@ -76,6 +76,8 @@ To generate counterfactual explanations, you need:
         alpha=0.5,
         theta=0.51,
     )
+
+.. _interpreting-the-output:
 
 Interpreting the Output
 -----------------------
@@ -128,7 +130,7 @@ counterfactual explanations.
 
     plot_counterfactual(
         original=cf_set.original_instance,
-        counterfactual=cf_set.best.counterfactual,
+        counterfactual=cf_set.best,
         cam_weights=cf_set.feature_importance,
         cam_mode="heatmap",
     )
@@ -145,4 +147,4 @@ was flipped.
 Further Reading
 ---------------
 
-For a runnable end-to-end example, see the :doc:`example` page.
+- :doc:`example` — runnable end-to-end example
