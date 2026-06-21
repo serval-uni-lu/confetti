@@ -2,6 +2,20 @@
 
 All notable changes to CONFETTI are documented here.
 
+## [1.0.1] — 2026-06-21
+
+### Security
+
+- Bump pyo3 from 0.25 to 0.29, fixing an out-of-bounds read in `PyList`/`PyTuple`
+  iterators (high) and a missing `Sync` bound on `PyCFunction::new_closure`
+  closures (medium).
+
+### Fixed
+
+- Fix ReadTheDocs build by adding Rust 1.86 toolchain to `.readthedocs.yml`.
+- Fix CI badge in README pointing to removed `ci.yaml` (now `ci.yml`).
+- Migrate CI and release workflows from deprecated `macos-13` to `macos-15-intel`.
+
 ## [1.0.0] — 2026-06-21
 
 First stable release. CONFETTI is now a fully self-contained library with zero
