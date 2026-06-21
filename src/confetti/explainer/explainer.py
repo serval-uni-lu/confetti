@@ -2,6 +2,7 @@ from confetti.errors import CONFETTIConfigurationError, CONFETTIError, CONFETTID
 from confetti.explainer._counterfactual_problem import CounterfactualProblem
 from confetti.structs import Counterfactual, CounterfactualSet, CounterfactualResults
 
+import logging
 import time
 from typing import Optional, List, Tuple
 import warnings
@@ -11,19 +12,45 @@ import numpy as np
 import pandas as pd
 import joblib
 
-import keras
-from tslearn.neighbors import KNeighborsTimeSeries
+from confetti.utils._compat import require_keras, require_torch
+from confetti.distances import TimeSeriesKNN
 
-from pymoo.algorithms.moo.nsga3 import NSGA3
-from pymoo.optimize import minimize
-from pymoo.util.ref_dirs import get_reference_directions
-from pymoo.operators.crossover.pntx import TwoPointCrossover
-from pymoo.operators.mutation.bitflip import BitflipMutation
-from pymoo.operators.sampling.rnd import BinaryRandomSampling
-from pymoo.termination import get_termination
+from confetti.algorithm import NSGA3, das_dennis, minimize
+from confetti.algorithm.crossover import TwoPointCrossover
+from confetti.algorithm.mutation import BitflipMutation
+from confetti.algorithm.sampling import BinaryRandomSampling
 
 from multiprocessing import Pool
 from functools import partial
+
+logger = logging.getLogger(__name__)
+
+
+def _load_model(model_path: str):
+    """Load a model from *model_path*, dispatching on file extension.
+
+    Supported formats:
+    * ``.joblib`` — loaded with :mod:`joblib`
+    * ``.keras`` — loaded with :func:`keras.models.load_model` (requires keras)
+    * ``.pt`` / ``.pth`` — loaded with :func:`torch.load` and wrapped in
+      :class:`~confetti.adapters.TorchModelAdapter` (requires torch)
+    """
+    if model_path.endswith(".joblib"):
+        return joblib.load(model_path)
+    elif model_path.endswith(".keras"):
+        keras = require_keras("loading a .keras model")
+        return keras.models.load_model(model_path)
+    elif model_path.endswith((".pt", ".pth")):
+        torch = require_torch("loading a .pt/.pth model")
+        from confetti.adapters import TorchModelAdapter
+
+        raw_model = torch.load(model_path, weights_only=False)
+        return TorchModelAdapter(raw_model)
+    else:
+        raise CONFETTIConfigurationError(
+            message=f"Unsupported model file extension: {model_path}",
+            hint="Supported extensions: .keras, .joblib, .pt, .pth",
+        )
 
 
 class CONFETTI:
@@ -53,15 +80,12 @@ class CONFETTI:
                 message="model_path must be a valid string or Path to the trained model.",
                 config={"received_type": type(model_path).__name__},
                 param="model_path",
-                hint="Pass a valid file path ending in `.keras` or `.joblib`.",
+                hint="Pass a valid file path ending in `.keras`, `.joblib`, `.pt`, or `.pth`.",
                 source="ConfettiExplainer.__init__",
             )
         else:
             self._model_path = model_path
-            if str(model_path).endswith(".joblib"):
-                self._model = joblib.load(str(model_path))
-            else:
-                self._model = keras.models.load_model(model_path)
+            self._model = _load_model(str(model_path))
 
         self._instances_to_explain: Optional[np.ndarray] = None
         self._original_labels: Optional[np.ndarray] = None
@@ -234,7 +258,7 @@ class CONFETTI:
                     "global_constraint": "sakoe_chiba",
                     "sakoe_chiba_radius": dtw_window,
                 }
-        knn = KNeighborsTimeSeries(n_neighbors=n_neighbors, metric=distance, metric_params=metric_params)
+        knn = TimeSeriesKNN(n_neighbors=n_neighbors, metric=distance, metric_params=metric_params)
         knn.fit(X_unlike)
 
         # Get nearest neighbors
@@ -303,7 +327,7 @@ class CONFETTI:
 
         # Initialize values
         if verbose:
-            print(f"Naive stage started for instance {instance_index}")
+            logger.info("Naive stage started for instance %d", instance_index)
 
         if self.weights is None:
             raise CONFETTIError(
@@ -353,7 +377,7 @@ class CONFETTI:
         )
 
         if verbose:
-            print(f"Naive stage finished for instance {instance_index}")
+            logger.info("Naive stage finished for instance %d", instance_index)
 
         counterfactual: Counterfactual = Counterfactual(
             counterfactual=perturbed_instance_reshaped,
@@ -452,13 +476,13 @@ class CONFETTI:
         high = subsequence_length
         low = 1
         if verbose:
-            print(f"Optimization of CE for Instance {instance_index} started.")
+            logger.info("Optimization of CE for Instance %d started.", instance_index)
 
         while low <= high:
             start_time = time.time()
             window = (low + high) // 2
             if verbose:
-                print(f"Optimization of CE for Instance {instance_index} in Window {window}")
+                logger.info("Optimization of CE for Instance %d in Window %d", instance_index, window)
 
             # Timestep where it starts
             if self.weights is None:
@@ -483,9 +507,7 @@ class CONFETTI:
                 theta=theta,
             )
 
-            reference_directions = get_reference_directions(
-                name="das-dennis", n_dim=number_of_objectives, n_partitions=n_partitions
-            )
+            reference_directions = das_dennis(number_of_objectives, n_partitions)
 
             algorithm = NSGA3(
                 pop_size=population_size,
@@ -495,14 +517,12 @@ class CONFETTI:
                 mutation=BitflipMutation(prob=mutation_probability),
             )
 
-            termination = get_termination("n_gen", maximum_number_of_generations)
-
-            result = minimize(problem, algorithm, termination, seed=1, verbose=False)
+            result = minimize(problem, algorithm, maximum_number_of_generations, seed=1, verbose=False)
 
             if result.X is None:
                 low = window + 1
             else:
-                objective_values.append(result.F)
+                objective_values.append(result.F)  # type: ignore[arg-type]  # F is never None when X is not None
 
                 n_samples = result.X.shape[0]
                 n_timesteps, n_features = query.shape
@@ -531,9 +551,9 @@ class CONFETTI:
                 high = window - 1
             final_time = time.time() - start_time
             if verbose:
-                print(f"Instance: {instance_index} | Window: {window} | Time: {final_time}")
+                logger.info("Instance: %d | Window: %d | Time: %.2f", instance_index, window, final_time)
         if verbose:
-            print(f"Optimization of CE for Instance {instance_index} finished.")
+            logger.info("Optimization of CE for Instance %d finished.", instance_index)
 
         if not objective_values:
             return None
@@ -608,15 +628,13 @@ class CONFETTI:
         """
 
         # Load model
-        if self.model_path.endswith(".joblib"):
-            model = joblib.load(self.model_path)
-        else:
-            model = keras.models.load_model(self.model_path)
+        model = _load_model(self.model_path)
 
         nun_index = self._nearest_unlike_neighbour(
             query=self.instances_to_explain[test_instance],
             predicted_label=self.original_labels[test_instance].item(),
             distance=proximity_distance,
+            dtw_window=dtw_window,
             n_neighbors=1,
             theta=theta,
         )
@@ -631,8 +649,8 @@ class CONFETTI:
 
         if self.weights is None:
             if verbose:
-                print("No feature weights were found. Skipping naive stage.")
-                print(f"Optimization stage started for instance {test_instance}")
+                logger.info("No feature weights were found. Skipping naive stage.")
+                logger.info("Optimization stage started for instance %d", test_instance)
             counterfactual_set: None | CounterfactualSet = self._optimization(
                 instance_index=test_instance,
                 nun_index=nun_index,
@@ -662,8 +680,8 @@ class CONFETTI:
                 verbose=verbose,
             )
             if verbose:
-                print(f"Naive stage finished for instance {test_instance}")
-                print(f"Optimization stage started for instance {test_instance}")
+                logger.info("Naive stage finished for instance %d", test_instance)
+                logger.info("Optimization stage started for instance %d", test_instance)
 
             optimized: None | CounterfactualSet = self._optimization(
                 instance_index=test_instance,
@@ -768,8 +786,8 @@ class CONFETTI:
             Whether to include proximity minimization as an optimization
             objective.
         proximity_distance : str, default="euclidean"
-            Distance metric for proximity. Supported metrics include
-            Euclidean and several tslearn-based time-series distances.
+            Distance metric for proximity. Supported metrics are
+            [`euclidean`, `manhattan`, `dtw`, `soft_dtw`, `ctw`, `gak`].
         dtw_window : int or None, default=None
             Sakoe–Chiba radius for DTW proximity. If None, no warping
             constraint is applied.
@@ -791,26 +809,16 @@ class CONFETTI:
 
         Note
         -----
-        Distance metrics for proximity optimization are handled through the
-        ``tslearn.metrics`` module when ``optimize_proximity=True``.
+        CONFETTI includes built-in time-series distance metrics (DTW, Soft-DTW,
+        CTW, GAK, Manhattan) implemented in pure NumPy with optional Rust
+        acceleration.
 
-        CONFETTI supports several time-series distances beyond Euclidean, including
-        Dynamic Time Warping (DTW), Soft-DTW, CTW, and GAK. These metrics are accessed
-        internally via ``tslearn.metrics`` through functions such as
-        ``cdist_dtw``, ``cdist_ctw``, ``cdist_soft_dtw`` and ``cdist_gak``.
-
-        - If a tslearn-based distance is selected (e.g., ``proximity_distance="dtw"``),
-          the proximity objective computes pairwise distances between each generated
-          counterfactual and the original instance using the corresponding tslearn
-          cost matrix.
-        - DTW can optionally use a Sakoe–Chiba band via ``dtw_window`` for faster and
-          more constrained alignment.
-        - ``tslearn`` is **only required** when a non-Euclidean proximity metric is
-          requested. If tslearn is not installed and such a metric is selected,
-          CONFETTI raises a ``CONFETTIConfigurationError`` describing the missing
-          dependency.
-
-        Euclidean proximity does not require tslearn and is always available.
+        - When a non-Euclidean proximity metric is selected (e.g.,
+          ``proximity_distance="dtw"``), the proximity objective computes pairwise
+          distances between each counterfactual and the original instance using the
+          corresponding built-in metric.
+        - DTW can optionally use a Sakoe–Chiba band via ``dtw_window`` for faster
+          and more constrained alignment.
         """
 
         if processes is not None:
@@ -863,7 +871,7 @@ class CONFETTI:
 
         if results is None:
             if verbose:
-                print("No counterfactuals were generated.")
+                logger.info("No counterfactuals were generated.")
             return None
         else:
             if save_counterfactuals:
@@ -910,8 +918,6 @@ class CONFETTI:
             All counterfactual sets from parallel execution.
         """
 
-        pool = Pool(processes=processes)
-
         wrapped_one_pass = partial(
             self._one_pass,
             alpha=alpha,
@@ -929,15 +935,13 @@ class CONFETTI:
             verbose=verbose,
         )
 
-        results = pool.map(wrapped_one_pass, range(len(self.instances_to_explain)))
-        pool.close()
-        pool.join()
+        with Pool(processes=processes) as pool:
+            results = pool.map(wrapped_one_pass, range(len(self.instances_to_explain)))
 
         self.counterfactual_sets: List[CounterfactualSet] = []
 
         for r in results:
             counterfactual_set: CounterfactualSet = r
-            # self.nuns.append(nun)
             if counterfactual_set is not None:
                 self.counterfactual_sets.append(counterfactual_set)
 
@@ -986,12 +990,13 @@ class CONFETTI:
                 query=self.instances_to_explain[instance_index],
                 predicted_label=self.original_labels[instance_index].item(),
                 distance=proximity_distance,
+                dtw_window=dtw_window,
                 n_neighbors=1,
                 theta=theta,
             )
             if nun_index is None:
                 if verbose:
-                    print(f"Skipping instance {instance_index}: No valid NUN found.")
+                    logger.info("Skipping instance %d: No valid NUN found.", instance_index)
                 continue
 
             if self.weights is not None:
@@ -1004,7 +1009,7 @@ class CONFETTI:
 
                 if naive is None:
                     if verbose:
-                        print(f"Skipping instance {instance_index}: No valid naive counterfactual found.")
+                        logger.info("Skipping instance %d: No valid naive counterfactual found.", instance_index)
                     continue
 
                 optimized: None | CounterfactualSet = self._optimization(
@@ -1035,11 +1040,12 @@ class CONFETTI:
                         nearest_unlike_neighbour=self.reference_data[nun_index],
                         best_solution=naive,
                         all_counterfactuals=[naive],
+                        feature_importance=self.weights[nun_index] if self.weights is not None else None,
                     )
                     counterfactual_sets.append(counterfactual_set)
             else:
                 if verbose:
-                    print("Skipping Naive Stage as no weights were provided.")
+                    logger.info("Skipping Naive Stage as no weights were provided.")
 
                 optimized: None | CounterfactualSet = self._optimization(
                     instance_index=instance_index,
@@ -1064,7 +1070,7 @@ class CONFETTI:
                     counterfactual_sets.append(optimized)
                 else:
                     if verbose:
-                        print(f"No valid optimized counterfactual found for instance {instance_index}.")
+                        logger.info("No valid optimized counterfactual found for instance %d.", instance_index)
                     continue
 
         if counterfactual_sets:
@@ -1129,10 +1135,7 @@ class CONFETTI:
 
         Note
         -----
-        Confidence is maximized while sparsity is minimized. However, in Pymoo's implementation, to maximize
-        an objective you need to set it to negative. (e.g. f1 = -confidence, f2 = sparsity). Thus, confidence in
-        objective values will appear as negative while sparsity as positive.
-        Therefore, it is necessary to first flip confidence so both objectives are higher-is-better before applying weights.
+        Confidence is maximized while sparsity is minimized.
 
         """
 

@@ -1,10 +1,13 @@
 from dataclasses import dataclass
+import logging
 from typing import List, Union, Optional
 import pandas as pd
 import numpy as np
 from confetti.errors import CONFETTIError, CONFETTIDataTypeError
 from confetti.utils import array_to_string
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -17,8 +20,8 @@ class Counterfactual:
         :class:`~confetti.explainer.counterfactual_structs.CounterfactualSet`.
     """
 
-    counterfactual: np.ndarray
-    """The generated counterfactual time series."""
+    counterfactual: np.ndarray | pd.DataFrame
+    """The generated counterfactual instance."""
 
     label: str | int | float
     """The predicted label corresponding to the counterfactual."""
@@ -27,7 +30,14 @@ class Counterfactual:
         if not isinstance(other, Counterfactual):
             return NotImplemented
 
-        return self.label == other.label and np.array_equal(self.counterfactual, other.counterfactual)
+        if self.label != other.label:
+            return False
+
+        if isinstance(self.counterfactual, pd.DataFrame) and isinstance(other.counterfactual, pd.DataFrame):
+            return self.counterfactual.equals(other.counterfactual)
+        if isinstance(self.counterfactual, np.ndarray) and isinstance(other.counterfactual, np.ndarray):
+            return np.array_equal(self.counterfactual, other.counterfactual)
+        return False
 
 
 class CounterfactualSet:
@@ -35,11 +45,11 @@ class CounterfactualSet:
 
     Parameters
     ----------
-    original_instance : np.ndarray
+    original_instance : np.ndarray or pd.DataFrame
         The original instance for which counterfactuals were generated.
     original_label : str | int | float | np.int64 | np.float64
         The predicted label of the original instance.
-    nearest_unlike_neighbour : np.ndarray
+    nearest_unlike_neighbour : np.ndarray or pd.DataFrame
         The nearest unlike neighbour (NUN) of the original instance.
     best_solution : Counterfactual or None
         The best counterfactual solution identified by the method.
@@ -59,9 +69,9 @@ class CounterfactualSet:
 
     def __init__(
         self,
-        original_instance: np.ndarray,
+        original_instance: np.ndarray | pd.DataFrame,
         original_label: str | int | float | np.int64 | np.float64,
-        nearest_unlike_neighbour: np.ndarray,
+        nearest_unlike_neighbour: np.ndarray | pd.DataFrame,
         best_solution: None | Counterfactual,
         all_counterfactuals: List[Counterfactual],
         feature_importance: Optional[np.ndarray] = None,
@@ -75,20 +85,20 @@ class CounterfactualSet:
             feature_importance,
         )
 
-        self._original_instance: np.ndarray = original_instance
+        self._original_instance: np.ndarray | pd.DataFrame = original_instance
         self._original_label: str | int | float = original_label
-        self._nearest_unlike_neighbour: np.ndarray = nearest_unlike_neighbour
+        self._nearest_unlike_neighbour: np.ndarray | pd.DataFrame = nearest_unlike_neighbour
         self._best: Counterfactual = best_solution
         self._all_counterfactuals: List[Counterfactual] = all_counterfactuals
         self._feature_importance: Optional[np.ndarray] = feature_importance  # optional 1D weights
 
     @property
-    def original_instance(self) -> np.ndarray:
+    def original_instance(self) -> np.ndarray | pd.DataFrame:
         """Return the original instance.
 
         Returns
         -------
-        np.ndarray
+        np.ndarray or pd.DataFrame
             The original instance for which counterfactuals were generated.
         """
         return self._original_instance
@@ -105,12 +115,12 @@ class CounterfactualSet:
         return self._original_label
 
     @property
-    def nearest_unlike_neighbour(self) -> np.ndarray:
+    def nearest_unlike_neighbour(self) -> np.ndarray | pd.DataFrame:
         """Return the nearest unlike neighbour.
 
         Returns
         -------
-        np.ndarray
+        np.ndarray or pd.DataFrame
             The nearest unlike neighbour instance.
         """
         return self._nearest_unlike_neighbour
@@ -208,13 +218,13 @@ class CounterfactualSet:
                 lambda x: array_to_string(x) if isinstance(x, np.ndarray) else None
             )
         df.to_csv(output_path, index=False)
-        print(f"Counterfactuals exported to {output_path}")
+        logger.info("Counterfactuals exported to %s", output_path)
 
     @staticmethod
     def _validate_dtypes(
-        original_instance: np.ndarray,
+        original_instance: np.ndarray | pd.DataFrame,
         original_label: Union[str, int, float, np.int64, np.float64],
-        nearest_unlike_neighbour: np.ndarray,
+        nearest_unlike_neighbour: np.ndarray | pd.DataFrame,
         best_solution: None | Counterfactual,
         all_counterfactuals: List[Counterfactual],
         feature_importance: Optional[np.ndarray],
@@ -229,14 +239,19 @@ class CounterfactualSet:
         """
 
         validations = [
-            ("original_instance", original_instance, np.ndarray, "numpy array"),
+            ("original_instance", original_instance, (np.ndarray, pd.DataFrame), "numpy array or DataFrame"),
             (
                 "original_label",
                 original_label,
                 (str, int, float, np.int64, np.float64),
                 "string, integer, float, np.int64, or np.float64",
             ),
-            ("nearest_unlike_neighbour", nearest_unlike_neighbour, np.ndarray, "numpy array"),
+            (
+                "nearest_unlike_neighbour",
+                nearest_unlike_neighbour,
+                (np.ndarray, pd.DataFrame),
+                "numpy array or DataFrame",
+            ),
         ]
 
         for param, value, expected_type, expected_str in validations:
@@ -261,7 +276,6 @@ class CounterfactualSet:
                 hint="Ensure that all entries are of type Counterfactual object.",
             )
 
-        # new validation for optional feature_importance
         if feature_importance is not None:
             if not isinstance(feature_importance, np.ndarray):
                 raise CONFETTIDataTypeError(
@@ -364,4 +378,4 @@ class CounterfactualResults:
         df["original_instance"] = df["original_instance"].apply(array_to_string)
         df["nearest_unlike_neighbour"] = df["nearest_unlike_neighbour"].apply(array_to_string)
         df.to_csv(output_path, index=False)
-        print(f"All counterfactuals exported to {output_path}")
+        logger.info("All counterfactuals exported to %s", output_path)

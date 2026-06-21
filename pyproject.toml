@@ -1,7 +1,11 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
 [project]
 name = "confetti-ts"
-version = "0.1.1"
-description = "A multi-objective counterfactual explanation method for deep learning based multivariate time series classifiers."
+version = "1.0.0"
+description = "A multi-objective counterfactual explanation method for time series classifiers."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -11,6 +15,7 @@ authors = [
   {name = "Raoni Lourenco", email = "raoni.lourenco@uni.lu"},
 ]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
@@ -25,12 +30,14 @@ dependencies = [
     "numpy>=2.3",
     "pandas>=2.2.3",
     "joblib>=1.2",
-    "keras>=3.12.0",
-    "tensorflow>=2.20.0",
     "scikit-learn>=1.7.2",
-    "pymoo>=0.6.1",
-    "tslearn>=0.7.0",
+    "matplotlib>=3.8",
 ]
+
+[project.optional-dependencies]
+keras = ["keras>=3.12.0", "tensorflow>=2.20.0"]
+torch = ["torch>=2.0"]
+all = ["keras>=3.12.0", "tensorflow>=2.20.0", "torch>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/serval-uni-lu/confetti"
@@ -38,11 +45,10 @@ Documentation = "https://confetti-ts.readthedocs.io/en/latest/index.html"
 Repository = "https://github.com/serval-uni-lu/confetti"
 Issues = "https://github.com/serval-uni-lu/confetti/issues"
 
-[tool.setuptools]
-package-dir = { "" = "src" }
-
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.maturin]
+python-source = "src"
+module-name = "confetti._rust_core"
+features = ["pyo3/extension-module"]
 
 [dependency-groups]
 dev = [
@@ -53,6 +59,7 @@ dev = [
     "furo"
 ]
 
-plots = [
-    "matplotlib>=3.8",
-]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+xfail_strict = true

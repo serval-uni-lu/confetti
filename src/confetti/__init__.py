@@ -1,10 +1,11 @@
 from importlib.metadata import version, PackageNotFoundError
 
 try:
-    __version__ = version("confetti")
+    __version__ = version("confetti-ts")
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
+from .adapters import Predictor, TorchModelAdapter
 from .explainer.explainer import CONFETTI
 from .errors import CONFETTIConfigurationError, CONFETTIError, CONFETTIDataTypeError
 from confetti.structs.counterfactual_structs import Counterfactual, CounterfactualSet, CounterfactualResults
@@ -18,4 +19,6 @@ __all__ = [
     "Counterfactual",
     "CounterfactualSet",
     "CounterfactualResults",
+    "Predictor",
+    "TorchModelAdapter",
 ]

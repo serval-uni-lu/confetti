@@ -1,8 +1,7 @@
-from pymoo.core.problem import Problem
+from confetti.algorithm._problem import Problem
 from typing import Optional
 import numpy as np
-import importlib
-from confetti.errors import CONFETTIConfigurationError
+from confetti.distances import get_cdist_function
 
 
 class CounterfactualProblem(Problem):
@@ -26,7 +25,7 @@ class CounterfactualProblem(Problem):
         Define a multi-objective optimization problem for generating counterfactuals
         using a perturbed subsequence of the original time series instance.
 
-        This class is designed to be used with evolutionary algorithms from pymoo. It encodes
+        This class is designed to be used with CONFETTI's NSGA-III implementation. It encodes
         the counterfactual generation process as a two-objective optimization problem, where
         the goals are to maximize confidence in the target class and minimize the number of changes (sparsity).
         A third constraint ensures that the predicted probability exceeds a given threshold (`theta`).
@@ -183,54 +182,20 @@ class CounterfactualProblem(Problem):
         metric_name = metric.lower()
         if metric_name == "euclidean":
             return np.sqrt(np.sum((counterfactuals - original_instance[None, :, :]) ** 2, axis=(1, 2)))
-        else:
-            tslearn_distance_function = self._select_tslearn_distance_function(metric_name=metric_name)
+
+        distance_function = get_cdist_function(metric_name)
 
         X = counterfactuals  # (N, T, C)
         Y = original_instance[None, :, :]  # (1, T, C)
 
         if metric_name == "dtw" and dtw_window is not None and dtw_window > 0:
-            distances = tslearn_distance_function(
+            distances = distance_function(
                 X,
                 Y,
                 global_constraint="sakoe_chiba",
                 sakoe_chiba_radius=int(dtw_window),
             )
         else:
-            distances = tslearn_distance_function(X, Y)
+            distances = distance_function(X, Y)
 
         return distances.ravel()
-
-    def _select_tslearn_distance_function(self, metric_name: str = "dtw"):
-        """
-        Select the appropriate distance function from tslearn based on the specified metric.
-        Args:
-            metric_name: The name of the distance metric to use.
-
-        Returns:
-            function: The selected distance function.
-        """
-        try:
-            tslearn_metrics = importlib.import_module("tslearn.metrics")
-        except ImportError as e:
-            raise ImportError(
-                "Distance metrics from tslearn require tslearn. Install with `pip install tslearn`."
-            ) from e
-
-        name_map = {
-            "dtw": "cdist_dtw",
-            "ctw": "cdist_ctw",
-            "softdtw": "cdist_soft_dtw",
-            "gak": "cdist_gak",
-        }
-        cdist_function_name: None | str = name_map.get(metric_name.lower())
-
-        if cdist_function_name:
-            return getattr(tslearn_metrics, cdist_function_name)
-        else:
-            raise CONFETTIConfigurationError(
-                message="The specified proximity distance metric is not supported. ",
-                param="proximity_distance",
-                config={"proximity_distance": metric_name},
-                hint="Choose from 'euclidean', 'manhattan', 'dtw', 'ctw', 'softdtw', or 'gak'.",
-            )

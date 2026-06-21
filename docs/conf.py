@@ -8,13 +8,18 @@
 import os
 import sys
 from datetime import datetime
+from importlib.metadata import version as get_version, PackageNotFoundError
 
-sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, os.path.abspath("../src"))
 
 project = "CONFETTI"
 copyright = f"{datetime.today().year}, Alan Paredes Cetina"
 author = "Alan Paredes Cetina"
-release = "0.1.0"
+try:
+    release = get_version("confetti-ts")
+except PackageNotFoundError:
+    release = "0.0.0"
+version = release
 docstitle = "CONFETTI"
 
 # -- General configuration ---------------------------------------------------
@@ -25,7 +30,14 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.mathjax",
+    "sphinx.ext.intersphinx",
 ]
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
+}
 
 autosummary_generate = True
 

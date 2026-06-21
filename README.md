@@ -32,27 +32,25 @@
 ![CONFETTI Logo](https://raw.githubusercontent.com/serval-uni-lu/confetti/main/docs/artwork/confetti-logo.png)
 
 ---
-# Counterfactual Explanations for Multivariate Time Series
+# Counterfactual Explanations for Time Series
 
 
 
-**CONFETTI** is a multi-objective method for generating **counterfactual explanations for multivariate time series**. 
-It identifies the most influential subsequences, constructs a minimal perturbation, and optimizes it under multiple objectives to produce **sparse**, **realistic**, and **confidence-increasing** counterfactuals 
+**CONFETTI** is a multi-objective method for generating **counterfactual explanations** for **multivariate time series** classifiers.
+It identifies the most influential features or temporal regions, constructs a minimal perturbation, and optimizes it under multiple objectives to produce **sparse**, **realistic**, and **confidence-increasing** counterfactuals.
 
-CONFETTI is model-agnostic and works with **any deep learning classifier**, differentiable or not.
+CONFETTI is model-agnostic and works with **any classifier** — Keras, PyTorch, or scikit-learn.
 
 --- 
 ## ✨ Highlights
 
-* Multi-objective optimization using NSGA-III
-* Works for any **Keras/Scikit-learn** multivariate time series classifier
+* Multi-objective optimization using **NSGA-III**
+* **Time series**: works with any Torch/Keras/scikit-learn multivariate time series classifier
+* **Rust-accelerated** backend for distances and NSGA-III
 * Optional use of **class activation maps** for feature-weighted perturbations
+* Built-in distance metrics: Euclidean, Manhattan, DTW, Soft-DTW, GAK, CTW
 * Generates multiple diverse counterfactuals per instance
 * Parallelized counterfactual generation
-* Built-in utilities for:
-  * loading datasets
-  * computing CAM weights
-  * visualizing counterfactual explanations
 
 ---
 ## 🚀 Installation
@@ -61,6 +59,7 @@ CONFETTI is model-agnostic and works with **any deep learning classifier**, diff
 ```bash
 pip install confetti-ts
 ```
+Pre-built wheels are available for common platforms. If no wheel is available for your system, the install requires a [Rust toolchain](https://rustup.rs/).
 
 ### Development Installation
 ```bash
@@ -72,22 +71,26 @@ source .venv/bin/activate
 uv pip install -e .
 ```
 
-Requirements:
+Core dependencies:
 
 * Python 3.12+
-* NumPy, pandas
-* Keras 3.x
-* TensorFlow 
-* Pymoo
-* tslearn
+* NumPy, pandas, scikit-learn, joblib, matplotlib
 
-All dependencies are handled automatically via ``pyproject.toml``.
+Optional (model backends):
+
+* Keras 3.x + TensorFlow (`pip install confetti-ts[keras]`)
+* PyTorch (`pip install confetti-ts[torch]`)
+* All backends (`pip install confetti-ts[all]`)
 
 ---
 
-## ⚡ Quick Example
-Below is a minimal end-to-end example based on the ``demo_confetti.ipynb`` notebook.
+## ⚡ Quick Example — Time Series
+
+Below is a minimal end-to-end example for multivariate time series counterfactuals.
 It loads a trained model, prepares a dataset, and generates counterfactuals for a single instance.
+
+> The example files are included in the repository under `examples/`.
+> Clone it first with `git clone https://github.com/serval-uni-lu/confetti.git`.
 
 ```python
 from confetti import CONFETTI
@@ -120,11 +123,16 @@ results = explainer.generate_counterfactuals(
     reference_weights=training_weights,      # or None if not available
 )
 
+# results is a CounterfactualResults list — one CounterfactualSet per instance.
+# Each set contains the original instance, the best counterfactual, all
+# candidates, and the NUN's CAM feature-importance weights (when provided).
+cf_set = results[0]
+
 # Visualize the best counterfactual
 plot_counterfactual(
-    original=results[0].original_instance,
-    counterfactual=results[0].best,
-    cam_weights=results[0].feature_importance,
+    original=cf_set.original_instance,
+    counterfactual=cf_set.best,
+    cam_weights=cf_set.feature_importance,
     cam_mode="heatmap",
     title="Counterfactual Explanation"
 )
@@ -138,17 +146,27 @@ In the visualization:
 * red curves represent the counterfactual subsequence
 * the heatmap corresponds to CAM scores of the nearest unlike neighbor
 
-The alignment between CAM activation and the altered subsequence shows how CONFETTI uses attribution to target meaningful areas of the time series.
+---
+## 🆕 What's New in v1.0.0
+
+* **Stable release** — production-ready API with no breaking changes expected
+* **Rust-accelerated backend** — distances (DTW, Soft-DTW, GAK, Manhattan) and NSGA-III components via PyO3
+* **Custom NSGA-III** — zero-dependency genetic algorithm (pymoo removed)
+* **Built-in distance metrics** — pure-numpy DTW, Soft-DTW, GAK, CTW, Manhattan (tslearn removed)
+* **PyTorch adapter** — use PyTorch models alongside Keras and scikit-learn
+* **Visualization theming** — light/dark theme support with improved plot aesthetics
+
+See the full [CHANGELOG](CHANGELOG.md) for details.
 
 ---
-## 📚Documentation
+## 📚 Documentation
 
 The full documentation, including usage guides, API reference, and examples, is available at:
 
 👉 **https://confetti-ts.readthedocs.io/en/latest/**
 
 ---
-## 📄License
+## 📄 License
 
 CONFETTI is released under the [MIT License](LICENSE). 
 
@@ -168,9 +186,6 @@ If you use CONFETTI in your research, please consider citing the following paper
 }
 ```
 
-To **replicate the experiments described in the paper**, use the **`paper` branch** of this
+The original code used when the method was published is at the **`paper` branch** of this
 repository. It contains the experiment scripts, model configurations, and dataset handling
 used in the publication.
-
-
-
