@@ -10,6 +10,32 @@ from confetti.errors import (
     CONFETTIDataTypeError,
 )
 from confetti.structs import Counterfactual
+from confetti.visualizations._theme import get_theme
+
+_FONT_FAMILY = "sans-serif"
+
+
+def _apply_theme(fig, axes_list, t):
+    fig.set_facecolor(t["bg"])
+    for ax in axes_list:
+        ax.set_facecolor(t["panel"])
+        ax.tick_params(colors=t["text_dim"], labelsize=9)
+        for spine in ax.spines.values():
+            spine.set_color(t["grid"])
+            spine.set_linewidth(0.6)
+
+
+def _style_legend(ax, t):
+    leg = ax.get_legend()
+    if leg is None:
+        return
+    leg.get_frame().set_facecolor(t["panel"])
+    leg.get_frame().set_edgecolor(t["grid"])
+    leg.get_frame().set_alpha(0.9)
+    leg.get_frame().set_linewidth(0.5)
+    for text in leg.get_texts():
+        text.set_color(t["text"])
+        text.set_fontsize(8.5)
 
 
 def _normalize_series(series: np.ndarray | Counterfactual, param_name: str) -> np.ndarray:
@@ -123,6 +149,7 @@ def plot_time_series(
     channels: Optional[Sequence[int]] = None,
     figsize: Optional[Tuple[float, float]] = None,
     title: Optional[str] = None,
+    theme: str = "light",
 ) -> None:
     """
     Plot a multivariate time series.
@@ -138,21 +165,25 @@ def plot_time_series(
         Figure size passed to Matplotlib. If ``None``, determined automatically.
     title : str, optional
         Title of the figure.
+    theme : {"light", "dark"}, default="light"
+        Color theme for the plot.
 
     Raises
     ------
     CONFETTIDataTypeError
         If ``series`` has an unsupported shape.
     CONFETTIConfigurationError
-        If ``channels`` contains invalid indices.
+        If ``channels`` contains invalid indices or ``theme`` is not recognized.
     """
+    t = get_theme(theme)
+
     series_2d = _normalize_series(series, param_name="series")
     series_selected, selected_idx = _select_channels(series_2d, channels)
 
     timesteps, n_channels = series_selected.shape
 
     if figsize is None:
-        figsize = (12.0, 3.0 * n_channels)
+        figsize = (13.0, 2.8 * n_channels + 0.6)
 
     plt.style.use("default")
     fig, axes = plt.subplots(n_channels, 1, figsize=figsize, sharex=True)
@@ -160,19 +191,27 @@ def plot_time_series(
     if n_channels == 1:
         axes = [axes]
 
+    _apply_theme(fig, axes, t)
+
     time_axis = np.arange(timesteps)
+    channel_colors = t["channel_colors"]
 
     for i, ax in enumerate(axes):
         chan_idx = selected_idx[i]
-        ax.plot(time_axis, series_selected[:, i], linewidth=2.0, label=f"Channel {chan_idx}")
-        ax.set_ylabel("Value")
-        ax.grid(True, linestyle=":", alpha=0.4)
-        ax.legend(loc="upper right")
+        color = channel_colors[i % len(channel_colors)]
+        data = series_selected[:, i]
 
-    axes[-1].set_xlabel("Time")
+        ax.plot(time_axis, data, linewidth=1.8, color=color, alpha=0.95, label=f"Channel {chan_idx}", zorder=3)
+
+        ax.set_ylabel("Value", fontsize=9, color=t["text_dim"], family=_FONT_FAMILY)
+        ax.grid(True, linestyle="-", linewidth=0.3, color=t["grid"], alpha=0.6)
+        ax.legend(loc="upper right", fontsize=8.5, frameon=True)
+        _style_legend(ax, t)
+
+    axes[-1].set_xlabel("Time", fontsize=10, color=t["text_dim"], family=_FONT_FAMILY)
 
     if title is not None:
-        fig.suptitle(title, y=0.98)
+        fig.suptitle(title, y=0.97, fontsize=14, fontweight="semibold", color=t["text"], family=_FONT_FAMILY)
 
     plt.tight_layout()
     plt.show()
@@ -186,6 +225,7 @@ def plot_counterfactual(
     cam_mode: str = "none",
     figsize: Optional[Tuple[float, float]] = None,
     title: Optional[str] = None,
+    theme: str = "light",
 ) -> None:
     """
     Plot an original multivariate time series together with its counterfactual.
@@ -217,14 +257,19 @@ def plot_counterfactual(
         Figure size passed to Matplotlib. If ``None``, chosen automatically.
     title : str, optional
         Optional title for the figure.
+    theme : {"light", "dark"}, default="light"
+        Color theme for the plot.
 
     Raises
     ------
     CONFETTIDataTypeError
         If the time series arrays have incompatible shapes or invalid types.
     CONFETTIConfigurationError
-        If ``channels`` are invalid or if CAM settings are inconsistent.
+        If ``channels`` are invalid, CAM settings are inconsistent, or
+        ``theme`` is not recognized.
     """
+    t = get_theme(theme)
+
     original_2d = _normalize_series(original, param_name="original")
 
     if not isinstance(counterfactual, Counterfactual):
@@ -285,7 +330,7 @@ def plot_counterfactual(
     if figsize is None:
         base_height = 3.0
         extra = 1.5 if cam_mode == "heatmap" and cam_weights is not None else 0.0
-        figsize = (12.0, base_height * n_channels + extra)
+        figsize = (13.0, base_height * n_channels + extra + 0.6)
 
     plt.style.use("default")
     fig, axes = plt.subplots(
@@ -299,8 +344,14 @@ def plot_counterfactual(
     if n_rows == 1:
         axes = [axes]
 
+    _apply_theme(fig, axes, t)
+
     ts_axes = axes[:n_channels]
     cam_axis = axes[-1] if n_rows > n_channels else None
+
+    color_orig = t["original"]
+    color_cf = t["counterfactual"]
+    color_cam = t["cam"]
 
     # Normalize CAM for plotting (when used)
     cam_normalized = None
@@ -316,34 +367,41 @@ def plot_counterfactual(
         orig_dim = series_original[:, i]
         cf_dim = series_cf[:, i]
 
-        ax.plot(time_axis, orig_dim, linewidth=2.0, label="Original", color="#64cdc0")
+        ax.plot(time_axis, orig_dim, linewidth=1.8, label="Original", color=color_orig, alpha=0.95, zorder=3)
 
         diffs = np.where(orig_dim != cf_dim)[0]
         if diffs.size > 0:
             start_diff, end_diff = diffs[0], diffs[-1]
 
+            cf_x = time_axis[start_diff : end_diff + 1]
+            cf_y = cf_dim[start_diff : end_diff + 1]
+
             ax.plot(
-                time_axis[start_diff : end_diff + 1],
-                cf_dim[start_diff : end_diff + 1],
-                linewidth=2.0,
+                cf_x,
+                cf_y,
+                linewidth=1.8,
                 linestyle="--",
-                color="#ff595a",
+                color=color_cf,
+                alpha=0.95,
                 label="Counterfactual",
+                zorder=4,
             )
 
             if start_diff > 0:
                 ax.plot(
                     [time_axis[start_diff - 1], time_axis[start_diff]],
                     [orig_dim[start_diff - 1], cf_dim[start_diff]],
-                    linewidth=2.0,
-                    color="#ff595a",
+                    linewidth=1.8,
+                    color=color_cf,
+                    alpha=0.6,
                 )
             if end_diff < len(orig_dim) - 1:
                 ax.plot(
                     [time_axis[end_diff], time_axis[end_diff + 1]],
                     [cf_dim[end_diff], orig_dim[end_diff + 1]],
-                    linewidth=2.0,
-                    color="#ff595a",
+                    linewidth=1.8,
+                    color=color_cf,
+                    alpha=0.6,
                 )
 
         if cam_mode == "line" and cam_normalized is not None:
@@ -351,35 +409,38 @@ def plot_counterfactual(
             ax.plot(
                 time_axis,
                 scaled_cam,
-                linewidth=1.5,
+                linewidth=1.2,
                 linestyle=":",
-                color="#ffa500",
+                color=color_cam,
+                alpha=0.85,
                 label="CAM",
+                zorder=5,
             )
 
-        ax.set_ylabel("Value")
-        ax.set_title(f"Channel {chan_idx}")
-        ax.grid(True, linestyle=":", alpha=0.4)
+        ax.set_ylabel(f"Ch {chan_idx}", fontsize=9, color=t["text"], family=_FONT_FAMILY)
+        ax.grid(True, linestyle="-", linewidth=0.3, color=t["grid"], alpha=0.6)
 
         handles, labels = ax.get_legend_handles_labels()
         if handles:
-            ax.legend(loc="upper right")
+            ax.legend(loc="upper right", fontsize=8.5, frameon=True)
+            _style_legend(ax, t)
 
-    ts_axes[-1].set_xlabel("Time")
+    ts_axes[-1].set_xlabel("Time", fontsize=10, color=t["text_dim"], family=_FONT_FAMILY)
 
     if cam_mode == "heatmap" and cam_normalized is not None and cam_axis is not None:
         cam_axis.imshow(
             cam_normalized[np.newaxis, :],
             aspect="auto",
-            cmap="YlOrRd",
+            cmap=t["heatmap_cmap"],
             extent=[0, timesteps, 0, 1],
+            interpolation="bilinear",
         )
         cam_axis.set_yticks([])
-        cam_axis.set_ylabel("CAM")
+        cam_axis.set_ylabel("CAM", fontsize=9, color=t["text_dim"], family=_FONT_FAMILY)
         cam_axis.grid(False)
 
     if title is not None:
-        fig.suptitle(title, y=0.98)
+        fig.suptitle(title, y=0.97, fontsize=14, fontweight="semibold", color=t["text"], family=_FONT_FAMILY)
 
     plt.tight_layout()
     plt.show()

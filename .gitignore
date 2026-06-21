@@ -180,7 +180,7 @@ cython_debug/
 .vscode/
 *.code-workspace
 
-demo.py
+scripts
 
 #Agents
 agents.md
