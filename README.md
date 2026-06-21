@@ -147,7 +147,7 @@ In the visualization:
 * the heatmap corresponds to CAM scores of the nearest unlike neighbor
 
 ---
-## 🆕 What's New in v1.0.0
+## 🆕 What's New in v1.0.1
 
 * **Stable release** — production-ready API with no breaking changes expected
 * **Rust-accelerated backend** — distances (DTW, Soft-DTW, GAK, Manhattan) and NSGA-III components via PyO3
