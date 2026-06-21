@@ -136,7 +136,7 @@ pub fn normalization_update_py<'py>(
     f: PyReadonlyArray2<f64>,
     first_front: PyReadonlyArray1<i64>,
     n_dim: usize,
-) -> (Bound<'py, PyArray1<f64>>, PyObject) {
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Py<PyAny>)> {
     let front_slice = first_front.as_array();
     let front_vec: Vec<i64> = front_slice.to_vec();
     let (new_ideal, nadir_opt) = normalization_update_impl(
@@ -150,5 +150,5 @@ pub fn normalization_update_py<'py>(
         Some(n) => PyArray1::from_vec(py, n).into_any().unbind(),
         None => py.None(),
     };
-    (ideal_arr, nadir_py)
+    Ok((ideal_arr, nadir_py))
 }
