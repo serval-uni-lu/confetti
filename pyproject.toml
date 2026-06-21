@@ -31,6 +31,7 @@ dependencies = [
     "pandas>=2.2.3",
     "joblib>=1.2",
     "scikit-learn>=1.7.2",
+    "matplotlib>=3.8",
 ]
 
 [project.optional-dependencies]
@@ -58,9 +59,6 @@ dev = [
     "furo"
 ]
 
-plots = [
-    "matplotlib>=3.8",
-]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

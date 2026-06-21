@@ -37,7 +37,7 @@ Basic Workflow
 
 To generate counterfactual explanations, you need:
 
-- a **path to a trained model** (Keras ``.keras`` or joblib ``.joblib``)
+- a **path to a trained model** (Keras ``.keras``, PyTorch ``.pt``/``.pth``, or joblib ``.joblib``)
 - one or more **instances to explain** shaped
   ``(n_instances, time_steps, n_features)``
 - a **reference dataset** in the same format

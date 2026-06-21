@@ -33,7 +33,7 @@ Features
 --------
 - 🐍 Compatible with Python 3.12+
 - 🎯 Multi-objective counterfactual generation using NSGA-III
-- 📊 **Time series**: works with any Keras or scikit-learn multivariate time series classifier
+- 📊 **Time series**: works with any Keras, PyTorch, or scikit-learn multivariate time series classifier
 - 🔥 Optional use of CAMs for feature-weighted perturbations
 - ⚡ Rust-accelerated backend for distances, NSGA-III, and constraint evaluation
 - 🧪 Generates multiple diverse counterfactuals per instance

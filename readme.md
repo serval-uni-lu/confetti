@@ -59,6 +59,7 @@ CONFETTI is model-agnostic and works with **any classifier** — Keras, PyTorch,
 ```bash
 pip install confetti-ts
 ```
+Pre-built wheels are available for common platforms. If no wheel is available for your system, the install requires a [Rust toolchain](https://rustup.rs/).
 
 ### Development Installation
 ```bash
@@ -73,14 +74,13 @@ uv pip install -e .
 Core dependencies:
 
 * Python 3.12+
-* NumPy, pandas, scikit-learn, joblib
+* NumPy, pandas, scikit-learn, joblib, matplotlib
 
-Optional:
+Optional (model backends):
 
 * Keras 3.x + TensorFlow (`pip install confetti-ts[keras]`)
 * PyTorch (`pip install confetti-ts[torch]`)
-
-All dependencies are handled automatically via ``pyproject.toml``.
+* All backends (`pip install confetti-ts[all]`)
 
 ---
 
@@ -88,6 +88,9 @@ All dependencies are handled automatically via ``pyproject.toml``.
 
 Below is a minimal end-to-end example for multivariate time series counterfactuals.
 It loads a trained model, prepares a dataset, and generates counterfactuals for a single instance.
+
+> The example files are included in the repository under `examples/`.
+> Clone it first with `git clone https://github.com/serval-uni-lu/confetti.git`.
 
 ```python
 from confetti import CONFETTI
@@ -120,11 +123,16 @@ results = explainer.generate_counterfactuals(
     reference_weights=training_weights,      # or None if not available
 )
 
+# results is a CounterfactualResults list — one CounterfactualSet per instance.
+# Each set contains the original instance, the best counterfactual, all
+# candidates, and the NUN's CAM feature-importance weights (when provided).
+cf_set = results[0]
+
 # Visualize the best counterfactual
 plot_counterfactual(
-    original=results[0].original_instance,
-    counterfactual=results[0].best,
-    cam_weights=results[0].feature_importance,
+    original=cf_set.original_instance,
+    counterfactual=cf_set.best,
+    cam_weights=cf_set.feature_importance,
     cam_mode="heatmap",
     title="Counterfactual Explanation"
 )
