@@ -14,7 +14,7 @@
   
   <!-- Build Status -->
   <a href="https://github.com/serval-uni-lu/confetti/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/serval-uni-lu/confetti/ci.yaml?label=CI&logo=github" alt="CI Status">
+    <img src="https://img.shields.io/github/actions/workflow/status/serval-uni-lu/confetti/ci.yml?label=CI&logo=github" alt="CI Status">
   </a>
   
   <!-- Documentation -->
