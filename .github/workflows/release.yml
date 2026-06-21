@@ -36,8 +36,8 @@ jobs:
           - { os: ubuntu-latest,  target: x86_64,  python-version: "3.13" }
           - { os: ubuntu-latest,  target: aarch64, python-version: "3.12" }
           - { os: ubuntu-latest,  target: aarch64, python-version: "3.13" }
-          - { os: macos-13,       target: x86_64,  python-version: "3.12" }
-          - { os: macos-13,       target: x86_64,  python-version: "3.13" }
+          - { os: macos-15-intel, target: x86_64,  python-version: "3.12" }
+          - { os: macos-15-intel, target: x86_64,  python-version: "3.13" }
           - { os: macos-latest,   target: aarch64, python-version: "3.12" }
           - { os: macos-latest,   target: aarch64, python-version: "3.13" }
           - { os: windows-latest, target: x64,     python-version: "3.12" }
