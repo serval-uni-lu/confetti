@@ -45,7 +45,7 @@ CONFETTI is model-agnostic and works with **any classifier** — Keras, PyTorch,
 ## ✨ Highlights
 
 * Multi-objective optimization using **NSGA-III**
-* **Time series**: works with any Keras/scikit-learn multivariate time series classifier
+* **Time series**: works with any Torch/Keras/scikit-learn multivariate time series classifier
 * **Rust-accelerated** backend for distances and NSGA-III
 * Optional use of **class activation maps** for feature-weighted perturbations
 * Built-in distance metrics: Euclidean, Manhattan, DTW, Soft-DTW, GAK, CTW
@@ -139,12 +139,16 @@ In the visualization:
 * the heatmap corresponds to CAM scores of the nearest unlike neighbor
 
 ---
-## 🆕 What's New in v0.2.0
+## 🆕 What's New in v1.0.0
 
+* **Stable release** — production-ready API with no breaking changes expected
 * **Rust-accelerated backend** — distances (DTW, Soft-DTW, GAK, Manhattan) and NSGA-III components via PyO3
-* **Custom NSGA-III** — zero-dependency genetic algorithm 
-* **Built-in distance metrics** — pure-numpy DTW, Soft-DTW, GAK, CTW, Manhattan 
+* **Custom NSGA-III** — zero-dependency genetic algorithm (pymoo removed)
+* **Built-in distance metrics** — pure-numpy DTW, Soft-DTW, GAK, CTW, Manhattan (tslearn removed)
 * **PyTorch adapter** — use PyTorch models alongside Keras and scikit-learn
+* **Visualization theming** — light/dark theme support with improved plot aesthetics
+
+See the full [CHANGELOG](CHANGELOG.md) for details.
 
 ---
 ## 📚 Documentation
@@ -174,6 +178,6 @@ If you use CONFETTI in your research, please consider citing the following paper
 }
 ```
 
-To **replicate the experiments described in the paper**, use the **`paper` branch** of this
+The original code used when the method was published is at the **`paper` branch** of this
 repository. It contains the experiment scripts, model configurations, and dataset handling
 used in the publication.

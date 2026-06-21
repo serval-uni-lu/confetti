@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "confetti-ts"
-version = "0.2.0"
+version = "1.0.0"
 description = "A multi-objective counterfactual explanation method for time series classifiers."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -15,6 +15,7 @@ authors = [
   {name = "Raoni Lourenco", email = "raoni.lourenco@uni.lu"},
 ]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
@@ -60,3 +61,7 @@ dev = [
 plots = [
     "matplotlib>=3.8",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+xfail_strict = true

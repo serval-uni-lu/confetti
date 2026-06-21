@@ -13,5 +13,7 @@ visualization helpers, and dataset utilities.
    confetti.counterfactual_structs
    confetti.errors
    confetti.attribution
+   confetti.algorithm
+   confetti.distances
    confetti.utils
    confetti.visualizations
