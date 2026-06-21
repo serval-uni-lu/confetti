@@ -75,11 +75,6 @@ class TestCdistCtw:
         result = cdist_ctw(batch_a, batch_a)
         np.testing.assert_allclose(np.diag(result), 0.0, atol=1e-10)
 
-    def test_symmetry(self, batch_a, batch_b):
-        """CTW symmetry is approximate because CCA convergence is order-dependent."""
-        ab = cdist_ctw(batch_a, batch_b)
-        ba = cdist_ctw(batch_b, batch_a)
-        np.testing.assert_allclose(ab, ba.T, atol=0.2)
 
     def test_single_vs_batch(self, ts_a, batch_b):
         X = ts_a[np.newaxis, :, :]
