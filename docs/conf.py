@@ -8,7 +8,7 @@
 import os
 import sys
 from datetime import datetime
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import version as get_version, PackageNotFoundError
 
 sys.path.insert(0, os.path.abspath("../src"))
 
@@ -16,9 +16,10 @@ project = "CONFETTI"
 copyright = f"{datetime.today().year}, Alan Paredes Cetina"
 author = "Alan Paredes Cetina"
 try:
-    release = version("confetti-ts")
+    release = get_version("confetti-ts")
 except PackageNotFoundError:
     release = "0.0.0"
+version = release
 docstitle = "CONFETTI"
 
 # -- General configuration ---------------------------------------------------
